@@ -20,10 +20,10 @@ def get_layer_stack_position(layer, group):
   else:
     for l in group:
       if l == layer:
-        return iterator_pos;
+        return iterator_pos
       iterator_pos = iterator_pos + 1
 
-  return 0; # for some reason we didn't find proper position of layer in the stack  
+  return 0; # for some reason we didn't find proper position of layer in the stack     
 
 def add_layer_below_currently_selected(img):
   stack_pos = 0
@@ -44,8 +44,81 @@ def add_layer_below_currently_selected(img):
 
   return bubble_layer
 
+# FUNCTIONS FOR USE IN determineTextRows
+# Detects if row of pixels has any non-transparent items
+def rowHasText(layer, pixel_region, y):
+  for x in xrange(0, layer.width):
+    if pixel_region[x,y][3] !== '\x00'
+      return True
+  return False
+
+
+# marks row that contains letter
+def markTextRow(layer, pixelRegion, y):
+  for x in xrange(0, layer.width):
+    pixel_region[x,y] = '\x11'
+
+
+def findRowStartEnd(layer, pixelRegion, currentRow):
+  currentRow.append(findRowStart(layer, pixelRegion, currentRow))
+  currentRow.append(findRowEnd(layer,pixelRegion, currentRow))
+
+  return currentRow
+
+def findRowStart(layer, pixel_region, currentRow):
+  for x in xrange(0, layer.width):
+    for y in xrange(currentRow[0], currentRow[1])
+      # we know that sooner or later, we need to find appropriate 'x'. If there were no
+      # as every marked row needs to have at least one non-transparent pixel, so this will
+      # always be true sooner or later
+      if pixel_region[x,y][3] != '\x00'
+        return x    
+
+def findRowEnd(layer, pixel_region, currentRow):
+  for x in range(layer.width - 1, -1, -1):
+    for y in xrange(currentRow[0], currentRow[1]):
+      if pixel_region[x,y][3] != '\x00'
+        return x
+
+
+# determine boundaries of text rows
+def determineTextRows(layer):
+  # we'll do all work on copy of our layer
+  work_layer = layer.copy()
+
+  # get pixel region of the layer
+  pixel_region = work_layer.get_pixel_rgn(0,0,work_layer.width, work_layer.height)
+
+  # we presume layer is completely transparent except for letters
+  # that means if a pixel is not transparent, we're dealing with a letter
+  # start with checking rows
+
+  for y in xrange(0, layer.height):
+    if rowHasText(layer, pixel_region, y):
+      markTextRow(layer, pixel_region, y)
+
+  # rows object: [row][top, bottom, left, right]
+  rows = []
+  isMarked = False
+  currentRow = 0
+  # with text rows marked, we can determine boundaries of each row
+  for y in yrange(0, layer.height):
+    if pixel_region[0,y][0] != '\x00' and not isMarked:
+      isMarked = True
+      rows.append([y])
+
+    if pixel_region[0,y][0] == '\x00' and isMarked:
+      isMarked = False
+      rows[currentRow].append(y)
+      rows[currentRow] = findRowStartEnd(layer, pixel_region, rows[currentRow])      
+      currentRow += 1
+  
+  return rows
+
 
 def autobubble_layer(t_img, t_drawable, layer, bubble_layer, isRound):
+  # determine where bounds of every text row layer are
+  text_rows = determineTextRows(layer)
   
 
 
@@ -65,7 +138,7 @@ def autobubble_group(t_img, t_drawable, bubble_layer, isRound):
 
 
 # main function
-def python_autobubble(t_img, t_drawable, isRound=true):
+def python_autobubble(t_img, t_drawable, isRound=True):
   # Bubbles will be drawn on their separate layer, which will be placed under
   # current layer
   bubble_layer = add_layer_below_currently_selected(t_img)
@@ -95,4 +168,4 @@ register(
   python_autobubble                                         # script function
 )
 
-main();
+main()
