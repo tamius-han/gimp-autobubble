@@ -10,7 +10,7 @@ from gimpfu import *
 # plugin confirmed inexistance of an object property that would just give me
 # the position of the layer. Ok then, let's roll our own.
 def get_layer_stack_position(layer, group):
-  iterator_pos = 0;
+  iterator_pos = 0
 
   if type(group) is tuple:
     for layer_id in group:
@@ -48,7 +48,7 @@ def add_layer_below_currently_selected(img):
 # Detects if row of pixels has any non-transparent items
 def rowHasText(layer, pixel_region, y):
   for x in xrange(0, layer.width):
-    if pixel_region[x,y][3] !== '\x00'
+    if pixel_region[x,y][3] != '\x00'
       return True
   return False
 
@@ -112,6 +112,18 @@ def determineTextRows(layer):
       currentRow += 1
   
   return rows
+
+
+def correctRows(rows, minStepSize):
+  if len(rows) < 2:
+    return rows #there's nothing to do if we only have one row
+  
+  # for i in xrange(0, len(rows) - 2):
+  #   if rows[i][3] > rows[i+1][3] - minStepSize and rows[i][3] < rows[i+1][3] + minStepSize:
+  #     if rows[i][3] > rows[i+1][3] - minStepSize:
+  #       rows[i][3] = rows[i+1][3]
+  #     else:
+  #       rows[]
 
 
 def autobubble_layer(t_img, t_drawable, layer, bubble_layer, isRound, minStepSize):
