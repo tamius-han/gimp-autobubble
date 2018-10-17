@@ -52,13 +52,6 @@ def rowHasText(layer, pixel_region, y):
       return True
   return False
 
-
-# marks row that contains letter
-def markTextRow(layer, pixelRegion, y):
-  for x in xrange(0, layer.width):
-    pixel_region[x,y] = '\x11'
-
-
 def findRowStartEnd(layer, pixelRegion, currentRow):
   currentRow.append(findRowStart(layer, pixelRegion, currentRow))
   currentRow.append(findRowEnd(layer,pixelRegion, currentRow))
@@ -91,16 +84,21 @@ def determineTextRows(layer):
 
   # we presume layer is completely transparent except for letters
   # that means if a pixel is not transparent, we're dealing with a letter
-  # start with checking rows
-
+  # we mark rows with text one way, rows without the other.
+  #
+  # rows without text have red component of the first pixel set to 0x00
+  # rows with text have red component of the first pixel set to something else
   for y in xrange(0, layer.height):
     if rowHasText(layer, pixel_region, y):
-      markTextRow(layer, pixel_region, y)
+      pixel_region[0,y][0] = '\x11'
+    else:
+      pixel_region[0,y][0] = '\x00'
 
   # rows object: [row][top, bottom, left, right]
   rows = []
   isMarked = False
   currentRow = 0
+
   # with text rows marked, we can determine boundaries of each row
   for y in yrange(0, layer.height):
     if pixel_region[0,y][0] != '\x00' and not isMarked:
@@ -116,10 +114,22 @@ def determineTextRows(layer):
   return rows
 
 
-def autobubble_layer(t_img, t_drawable, layer, bubble_layer, isRound):
+def autobubble_layer(t_img, t_drawable, layer, bubble_layer, isRound, minStepSize):
+  # args:
+  #     t_img
+  #     t_drawable
+  #     layer        - layer with text
+  #     bubble_layer - layer on which to draw speech bubble
+  #     isRound      - is buble an ellipse (True) or a rectangle (False)?
+  #     minStepSize  - on rectangular bubbles, avoid "steps" that are shorter
+  #                    than this many pixels long
+
   # determine where bounds of every text row layer are
   text_rows = determineTextRows(layer)
-  
+
+  # if the bubble isn't round (i.e. we're drawing a rectangle), we try to 
+  # prevent some jaggedness. 
+
 
 
 def autobubble_group(t_img, t_drawable, bubble_layer, isRound): 
