@@ -3,6 +3,7 @@
 # docs: https://www.gimp.org/docs/python/index.html
 
 import math
+import copy
 from gimpfu import *
 
 # I tried looking for proper solution that gets position of a given layer
@@ -113,20 +114,94 @@ def determineTextRows(layer):
   
   return rows
 
+def findJag(edge1, edge2, minStepSize):
+  #  |<edge1
+  #   |<edge2    - returns 1
+  #
+  #   |<edge1
+  #  |<edge2     - returns -1
+  if edge1 > edge2 - minStepSize and edge1 < edge2 + minStepSize:
+    if edge1 > edge2:
+      return 1
+    else: 
+      return -1
+  
+  return 0
 
 def correctRows(rows, minStepSize):
   if len(rows) < 2:
     return rows #there's nothing to do if we only have one row
   
-  # for i in xrange(0, len(rows) - 2):
-  #   if rows[i][3] > rows[i+1][3] - minStepSize and rows[i][3] < rows[i+1][3] + minStepSize:
-  #     if rows[i][3] > rows[i+1][3] - minStepSize:
-  #       rows[i][3] = rows[i+1][3]
-  #     else:
-  #       rows[]
+  # correct jags in the left edge
+  for i in xrange(0, len(rows) - 2):
+    jag = findJag(rows[i][2], rows[i+1][2])
+    if jag == 1:
+      rows[i+1][2] = rows[i][2]
+    if jag == -1:
+      # in this case, we correct back, naively. We don't check whether re-adjustment
+      # would cause the jag to grow to acceptable size. I don't think the complicated
+      # nature of the work would make that worth it, but I'll accept a PR
+      rows[i][2] = rows[i+1][2]
+      if i > 1
+        for j in range(i - 1, -1, -1):
+          rows[j][2] = rows[i][2]
+  
+  # now correct the other edge, but mind that meanings of findJag() have flipped
+  for i in xrange(0, len(rows) - 2):
+    jag = findJag(rows[i][3], rows[i+1][3])
+    if jag == -1:
+      rows[i+1][3] = rows[i][3]
+    if jag == 1:
+      rows[i][3] = rows[i+1][3]
+      if i > 1
+        for j in range(i - 1, -1, -1):
+          rows[j][3] = rows[i][3]
+  
+  return rows
 
+def drawRectangularBubble(image, rows, layer, bubble_layer, xpad, ypad):
+  # let's get offsets into more human-readable form
+  offset_x = layer.offsets[0]
+  offset_y = layer.offsets[1]
 
-def autobubble_layer(t_img, t_drawable, layer, bubble_layer, isRound, minStepSize):
+  # let's do some pre-processing
+  connect_rows_treshold = 0
+  for row in rows
+    connect_rows_treshold += row[1] - row[0]
+
+  # if the difference between row[n][1] and row[n+1][0] is more than this,
+  # treat the rows as two separate bubbles
+  connect_rows_treshold /= (len(rows) * 2)
+
+  # now we can start drawing rectangles
+  for i in xrange(0, len(rows)):
+    select_x = offset_x + rows[i][2] - xpad
+    select_y = offset_y + rows[i][0] - ypad
+    select_w = rows[i][3] - rows[i][2] + (2*xpad)
+    select_h = rows[i][1] - rows[i][0] + (2*ypad)
+
+    # image, operation (0 - add), x, y, w, h)
+    pdb.gimp_image_select_rectangle(image, 0, select_x, select_y, select_w, select_h)
+    # drawable/layer, fill mode (1 - bg), x, y (anywhere goes cos selection)
+    pdb.gimp_drawable_edit_bucket_fill(bubble_layer, 1, 1, 1)
+
+    # ensure current row is connected with row on top (unless the gap between two rows is
+    # bigger than our treshold)
+    if i > 0 and rows[i][0] - rows[i-1][1] < connect_rows_treshold:
+      select_x = max(rows[i][2], rows[i-1][2])
+      select_w = min(rows[i][3], rows[i-1][3]) - select_x + (2*xpad)
+      select_x += offset_x - xpad
+
+      pdb.gimp_image_select_rectangle(select_x, rows[i-1][1], select_w, rows[i][0])
+      pdb.gimp_drawable_edit_bucket_fill(bubble_layer, 1, 1, 1)
+
+  # end
+
+def drawEllipseBubble(image, rows, layer, bubble_layer, xpad, ypad):
+  # uh oh
+  
+
+def autobubble_layer(t_img, t_drawable, layer, bubble_layer, isRound, minStepSize, pad):
   # args:
   #     t_img
   #     t_drawable
@@ -141,6 +216,9 @@ def autobubble_layer(t_img, t_drawable, layer, bubble_layer, isRound, minStepSiz
 
   # if the bubble isn't round (i.e. we're drawing a rectangle), we try to 
   # prevent some jaggedness. 
+  if not isRound:
+    text_rows = correctRows(text_rows, minStepSize)
+    drawRectangularBubble(text_rows, layer, bubble_layer)
 
 
 
@@ -161,6 +239,9 @@ def autobubble_group(t_img, t_drawable, bubble_layer, isRound):
 
 # main function
 def python_autobubble(t_img, t_drawable, isRound=True):
+  # save background
+  bg_save = gimp.get_background()
+
   # Bubbles will be drawn on their separate layer, which will be placed under
   # current layer
   bubble_layer = add_layer_below_currently_selected(t_img)
@@ -171,6 +252,9 @@ def python_autobubble(t_img, t_drawable, isRound=True):
     autobubble_group(t_img, t_drawable, bubble_layer, isRound)
   else
     autobubble_layer(t_img, t_drawable, t_img.active_layer, bubble_layer, isRound)
+
+  # at last, restore background
+  gimp.set_background(bg_save)
 
 
 # register plugin.
