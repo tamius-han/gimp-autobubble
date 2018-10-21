@@ -1,6 +1,12 @@
 #!/usr/bin/env python
 
 # docs: https://www.gimp.org/docs/python/index.html
+# 
+# cheat sheet for gimp for when manually doing stuff in console:
+#     active image:      gimp.image_list()[0]
+#     active layer:      <image>.active_layer()
+#
+# execfile('projects/gimp-autobubble/autobubble.py')
 
 import math
 import copy
@@ -15,7 +21,7 @@ def get_layer_stack_position(layer, group):
 
   if type(group) is tuple:
     for layer_id in group:
-      if gimp.Item.from_id(layer_id)) == layer:
+      if gimp.Item.from_id(layer_id) == layer:
         return iterator_pos
       iterator_pos = iterator_pos + 1
   else:
@@ -28,7 +34,7 @@ def get_layer_stack_position(layer, group):
 
 def add_layer_below_currently_selected(img):
   stack_pos = 0
-
+  
   if img.active_layer.parent:
     # parent is a group layer
     sublayers = pdb.gimp_item_get_children(img.active_layer)[1]
@@ -49,7 +55,7 @@ def add_layer_below_currently_selected(img):
 # Detects if row of pixels has any non-transparent items
 def rowHasText(layer, pixel_region, y):
   for x in xrange(0, layer.width):
-    if pixel_region[x,y][3] != '\x00'
+    if pixel_region[x,y][3] != '\x00':
       return True
   return False
 
@@ -61,17 +67,17 @@ def findRowStartEnd(layer, pixelRegion, currentRow):
 
 def findRowStart(layer, pixel_region, currentRow):
   for x in xrange(0, layer.width):
-    for y in xrange(currentRow[0], currentRow[1])
+    for y in xrange(currentRow[0], currentRow[1]):
       # we know that sooner or later, we need to find appropriate 'x'. If there were no
       # as every marked row needs to have at least one non-transparent pixel, so this will
       # always be true sooner or later
-      if pixel_region[x,y][3] != '\x00'
+      if pixel_region[x,y][3] != '\x00':
         return x    
 
 def findRowEnd(layer, pixel_region, currentRow):
   for x in range(layer.width - 1, -1, -1):
     for y in xrange(currentRow[0], currentRow[1]):
-      if pixel_region[x,y][3] != '\x00'
+      if pixel_region[x,y][3] != '\x00':
         return x
 
 
@@ -79,10 +85,10 @@ def findRowEnd(layer, pixel_region, currentRow):
 def determineTextRows(layer):
   # we'll do all work on copy of our layer
   work_layer = layer.copy()
-
+  #
   # get pixel region of the layer
   pixel_region = work_layer.get_pixel_rgn(0,0,work_layer.width, work_layer.height)
-
+  #
   # we presume layer is completely transparent except for letters
   # that means if a pixel is not transparent, we're dealing with a letter
   # we mark rows with text one way, rows without the other.
@@ -91,27 +97,27 @@ def determineTextRows(layer):
   # rows with text have red component of the first pixel set to something else
   for y in xrange(0, layer.height):
     if rowHasText(layer, pixel_region, y):
-      pixel_region[0,y][0] = '\x11'
+      pixel_region[0,y] = '\x11' + pixel_region[0,y][1:]
     else:
-      pixel_region[0,y][0] = '\x00'
-
+      pixel_region[0,y] = '\x00' + pixel_region[0,y][1:]
+  #
   # rows object: [row][top, bottom, left, right]
   rows = []
   isMarked = False
   currentRow = 0
-
+  #
   # with text rows marked, we can determine boundaries of each row
-  for y in yrange(0, layer.height):
+  for y in xrange(0, layer.height):
     if pixel_region[0,y][0] != '\x00' and not isMarked:
       isMarked = True
       rows.append([y])
-
+      #
     if pixel_region[0,y][0] == '\x00' and isMarked:
       isMarked = False
       rows[currentRow].append(y)
       rows[currentRow] = findRowStartEnd(layer, pixel_region, rows[currentRow])      
       currentRow += 1
-  
+  #
   return rows
 
 def findJag(edge1, edge2, minStepSize):
@@ -142,7 +148,7 @@ def correctRows(rows, minStepSize):
       # would cause the jag to grow to acceptable size. I don't think the complicated
       # nature of the work would make that worth it, but I'll accept a PR
       rows[i][2] = rows[i+1][2]
-      if i > 1
+      if i > 1:
         for j in range(i - 1, -1, -1):
           rows[j][2] = rows[i][2]
   
@@ -153,7 +159,7 @@ def correctRows(rows, minStepSize):
       rows[i+1][3] = rows[i][3]
     if jag == 1:
       rows[i][3] = rows[i+1][3]
-      if i > 1
+      if i > 1:
         for j in range(i - 1, -1, -1):
           rows[j][3] = rows[i][3]
   
@@ -166,7 +172,7 @@ def drawRectangularBubble(image, rows, layer, bubble_layer, xpad, ypad):
 
   # let's do some pre-processing
   connect_rows_treshold = 0
-  for row in rows
+  for row in rows:
     connect_rows_treshold += row[1] - row[0]
 
   # if the difference between row[n][1] and row[n+1][0] is more than this,
@@ -197,8 +203,10 @@ def drawRectangularBubble(image, rows, layer, bubble_layer, xpad, ypad):
 
   # end
 
-def drawEllipseBubble(image, rows, layer, bubble_layer, xpad, ypad):
+def getEllipseDimensions(rows):
   # uh oh
+  #
+  # returns [x,y,width,height]
   #
   # Ideally, we'd draw an ellipse such that all the points would be:
   #      * inside the ellipse
@@ -212,7 +220,11 @@ def drawEllipseBubble(image, rows, layer, bubble_layer, xpad, ypad):
   #      * draw ellipse through that point
   #  
   # Quick reminder. Rows coords are like this: top, bottom, left, right 
-  
+  #
+  # NOTE: gimp-image-select-ellipse takes arguments (x,y,width,height) AS
+  #       A FLOAT, which means we don't have to round stuff.
+  #       source: procedure browser in gimp (see: help menu)
+
   rowCount = len(rows)
 
   opposing_x = []
@@ -231,30 +243,35 @@ def drawEllipseBubble(image, rows, layer, bubble_layer, xpad, ypad):
         #        [xxxx row 2 xxxx]
         #
         opposing_x.append([rows[i][2], rows[j][3]])
-        center_x.append((rows[i][2] + rows[j][3]) / 2)
+        center_x.append(float(rows[i][2] + rows[j][3]) / 2)
         opposing_x.append([rows[i][3], rows[j][2]])
-        center_x.append((rows[i][3] + rows[j][2]) / 2)
+        center_x.append(float(rows[i][3] + rows[j][2]) / 2)
         
         # there's no vertical skew like that
         opposing_y.append([rows[i][0], rows[j][1]])
         center_y.append((rows[i][0] + rows[j][1]) / 2)
 
+  # FIXME: there's something potentially wrong here, these numbers are way too big
   if rowCount % 2 == 1:     # btw this catches cases where len = 1
     i = rowCount // 2       # this also works both for middle line and cases 
                             # where len = 1
     
     # we don't need to do that, strictly speaking, but let's duplicate x
     # because we did that with all the other line combos
-    opposing_x.append([rows[i][2], rows[i][3])
-    opposing_x.append([rows[i][2], rows[i][3])
-    center_x.append((rows[i][0] + rows[i][1]) / 2)
-    center_x.append((rows[i][0] + rows[i][1]) / 2)
+    opposing_x.append([rows[i][2], rows[i][3]])
+    opposing_x.append([rows[i][2], rows[i][3]])
+    center_x.append(float(rows[i][0] + rows[i][1]) / 2)
+    center_x.append(float(rows[i][0] + rows[i][1]) / 2)
 
     opposing_y.append([rows[i][0], rows[i][1]])
-    center_y.append((rows[i][0] + rows[i][1]) / 2)
+    center_y.append(float(rows[i][0] + rows[i][1]) / 2)
 
-  avg_x = int(round(sum(opposing_x) / float(len(opposing_x))))
-  avg_y = int(round(sum(opposing_y) / float(len(opposing_y))))
+  print ("opposing x & center")
+  print (opposing_x)
+  print (center_x)
+ 
+  avg_x = sum(center_x) / float(len(center_x))
+  avg_y = sum(center_y) / float(len(center_y))
 
   # middle point of the ellipse is now at avg_x, avg_y (relative to text layer)
   #
@@ -265,14 +282,135 @@ def drawEllipseBubble(image, rows, layer, bubble_layer, xpad, ypad):
   #       x = a * cos(t)
   #       y = b * sin(t)
   #
-  # x,y — coordinates of any point on the ellipse (known)
-  # a,b — radii/axes (we'd like to know)
-  # t   — some super secret parameter (angle from origin to
+  # x,y - coordinates of any point on the ellipse (known)
+  # a,b - radii/axes (we'd like to know)
+  # t   - some super secret parameter (angle from origin to
   #       the point on ellipse, if ellipse was squished to 
   #       a regular circle)
   #
   # Let's make our work easier and pretend we started drawing at 0,0 instead
   # of wherever the center of the ellipse is. Subtract center from coords:
+  
+  minx = 0
+  maxx = 0
+  miny = 0
+  maxy = 0
+
+  print ("START: opposing x:")
+  print (opposing_x)
+  print ("START: opposing y:")
+  print (opposing_y)
+
+  for i in xrange(0, len(opposing_x)):
+    opposing_x[i][0] -= avg_x
+    opposing_x[i][1] -= avg_x
+
+    if opposing_x[i][0] < minx:
+      minx = opposing_x[i][0]
+    if opposing_x[i][0] > maxx:
+      maxx = opposing_x[i][0]
+    if opposing_x[i][1] < minx:
+      minx = opposing_x[i][1]
+    if opposing_x[i][1] > maxx:
+      maxx = opposing_x[i][1]
+
+  print ("opposing x:")
+  print (opposing_x)
+
+  for i in xrange(0, len(opposing_y)):
+    opposing_y[i][0] -= avg_y
+    opposing_y[i][1] -= avg_y
+
+    if opposing_y[i][0] < miny:
+      miny = opposing_y[i][0]
+    if opposing_y[i][0] > maxy:
+      maxy = opposing_y[i][0]
+    if opposing_y[i][1] < miny:
+      miny = opposing_y[i][1]
+    if opposing_x[i][1] > maxy:
+      maxy = opposing_y[i][1]
+
+  print ("opposing y:")
+  print (opposing_y)
+
+  # calculate some basic width and height
+  innerWidth = maxx - minx
+  innerHeight = maxy - miny
+  
+  xSquashRatio = innerHeight / innerWidth
+
+  new_w = 0
+  new_h = 0
+
+  # start calculating ellipses for every point we deemed worthy
+  for i in xrange(0, len(opposing_x)):
+    # first, squash the ellipse into a circle
+    # here's a fun fact: we don't need to pair correct coordinates
+    # from opposing side, as long as we get axes and pairings right
+
+    half_i = i // 2
+    t = math.atan2((opposing_x[i][0] * xSquashRatio), opposing_y[half_i][0])
+
+    new_w = (opposing_x[i][0] / math.cos(t)) * 2
+    new_h = (opposing_y[half_i][0] / math.sin(t)) * 2
+  
+    # not quite correct, but we'll just assume that both width and 
+    # height increase at the asme time so ok I guess
+    if new_w > innerWidth:
+      innerWidth = new_w
+    
+    if new_h > innerHeight:
+      innerHeight = new_h
+    
+
+    # repeat for the second opposing point in the pair
+    t = math.atan2((opposing_x[i][1] * xSquashRatio), opposing_y[half_i][1])
+
+    new_w = abs( (opposing_x[i][1] / math.cos(t)) * 2)
+    new_h = abs( (opposing_y[half_i][1] / math.sin(t)) * 2)
+
+    # not quite correct, but we'll just assume that both width and 
+    # height increase at the asme time so ok I guess
+    if new_w > innerWidth:
+      innerWidth = new_w
+    
+    if new_h > innerHeight:
+      innerHeight = new_h
+
+
+  return [avg_x, avg_y, innerWidth, innerHeight]
+
+
+def drawEllipseBubble(image, rows, layer, bubble_layer, xpad, ypad):
+  # making things more readable
+
+  offset_x = layer.offsets[0]
+  offset_y = layer.offsets[1]
+
+  # oh boi. Let's start by putting the function that calculated ellipse dimensions
+  # into its own function in a bid to clean things up a bit
+  #
+  # returns [center_x, center_y, width, height] (note: center points are relative to
+  # the layer)
+  #
+  #
+  dims = getEllipseDimensions(rows)
+  
+  toolOffset_x = dims[2] // 2
+  toolOffset_y = dims[3] // 2
+
+  # correct coordinates and grow the ellipse  
+  select_x = dims[0] - toolOffset_x - xpad + offset_x
+  select_y = dims[1] - toolOffset_y - ypad + offset_y
+
+  select_w = dims[2] + 2 * xpad
+  select_h = dims[3] + 2 * ypad
+
+
+  # image, operation (0 - add), x, y, w, h)
+  pdb.gimp_image_select_ellipse(image, 0, select_x, select_y, select_w, select_h)
+  pdb.gimp_drawable_edit_bucket_fill(bubble_layer, 1, 1, 1)
+
 
  
 def autobubble_layer(t_img, t_drawable, layer, bubble_layer, isRound, minStepSize, pad):
@@ -306,7 +444,7 @@ def autobubble_group(t_img, t_drawable, bubble_layer, isRound):
     layer = gimp.Item.from_id(layer_id)
     if type(layer) is gimp.GroupLayer:       # btw yes, we DO do recursion
       autobubble_group(t_img, t_drawable, bubble_layer, isRound)
-    else
+    else:
       autobubble_layer(t_img, t_drawable, layer, bubble_layer, isRound)
     
 
@@ -324,7 +462,7 @@ def python_autobubble(t_img, t_drawable, isRound=True):
   # all layers in a group. 
   if type(t_img.active_layer) is gimp.GroupLayer:
     autobubble_group(t_img, t_drawable, bubble_layer, isRound)
-  else
+  else:
     autobubble_layer(t_img, t_drawable, t_img.active_layer, bubble_layer, isRound)
 
   # at last, restore background
@@ -332,20 +470,20 @@ def python_autobubble(t_img, t_drawable, isRound=True):
 
 
 # register plugin.
-register(
-  "python_fu_autobubble",                                   # name
-  "Automatically draw speech bubbles around text layers.",  # plugin tl;dr
-  "Automatically draw speech bubbles around text layers.",  # "help"
-  "Tamius Han",                                             # Author
-  "Tamius Han",                                             # Copyright
-  "2018-2019",                                              # Date
-  "<Image>/Filters/Render/_Auto-bubble",                    # Menu path
-  "*",                                                      # Image type
-  [                                                         # params
+# register(
+#   "python_fu_autobubble",                                   # name
+#   "Automatically draw speech bubbles around text layers.",  # plugin tl;dr
+#   "Automatically draw speech bubbles around text layers.",  # "help"
+#   "Tamius Han",                                             # Author
+#   "Tamius Han",                                             # Copyright
+#   "2018-2019",                                              # Date
+#   "<Image>/Filters/Render/_Auto-bubble",                    # Menu path
+#   "*",                                                      # Image type
+#   [                                                         # params
 
-  ],
-  [],                                                       # results
-  python_autobubble                                         # script function
-)
+#   ],
+#   [],                                                       # results
+#   python_autobubble                                         # script function
+# )
 
-main()
+# main()
