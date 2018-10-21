@@ -199,8 +199,82 @@ def drawRectangularBubble(image, rows, layer, bubble_layer, xpad, ypad):
 
 def drawEllipseBubble(image, rows, layer, bubble_layer, xpad, ypad):
   # uh oh
+  #
+  # Ideally, we'd draw an ellipse such that all the points would be:
+  #      * inside the ellipse
+  #      * as close as possible to the edge of the ellipse.
+  #
+  # That's a bit hard, though, so we'll have to do with an approximation:
+  #      * calculate the "center" of the ellipse (average 
+  #        middle point of all diagonals)
+  #      * determine which point is the furthest from the
+  #        middle point
+  #      * draw ellipse through that point
+  #  
+  # Quick reminder. Rows coords are like this: top, bottom, left, right 
   
+  rowCount = len(rows)
 
+  opposing_x = []
+  opposing_y = []
+  center_x = []
+  center_y = []
+
+  if rowCount > 1:    # having one row is a bit of a special case
+    for i in xrange(0, rowCount // 2):
+      for j in range(rowCount - 1, (rowCount // 2), -1):
+        # we need both to account for left/right skew, e.g if
+        # rows are aligned like this:
+        #    
+        #      [xxxx row 1 xxxx]
+        #    [...               ...]
+        #        [xxxx row 2 xxxx]
+        #
+        opposing_x.append([rows[i][2], rows[j][3]])
+        center_x.append((rows[i][2] + rows[j][3]) / 2)
+        opposing_x.append([rows[i][3], rows[j][2]])
+        center_x.append((rows[i][3] + rows[j][2]) / 2)
+        
+        # there's no vertical skew like that
+        opposing_y.append([rows[i][0], rows[j][1]])
+        center_y.append((rows[i][0] + rows[j][1]) / 2)
+
+  if rowCount % 2 == 1:     # btw this catches cases where len = 1
+    i = rowCount // 2       # this also works both for middle line and cases 
+                            # where len = 1
+    
+    # we don't need to do that, strictly speaking, but let's duplicate x
+    # because we did that with all the other line combos
+    opposing_x.append([rows[i][2], rows[i][3])
+    opposing_x.append([rows[i][2], rows[i][3])
+    center_x.append((rows[i][0] + rows[i][1]) / 2)
+    center_x.append((rows[i][0] + rows[i][1]) / 2)
+
+    opposing_y.append([rows[i][0], rows[i][1]])
+    center_y.append((rows[i][0] + rows[i][1]) / 2)
+
+  avg_x = int(round(sum(opposing_x) / float(len(opposing_x))))
+  avg_y = int(round(sum(opposing_y) / float(len(opposing_y))))
+
+  # middle point of the ellipse is now at avg_x, avg_y (relative to text layer)
+  #
+  # https://www.mathopenref.com/coordparamellipse.html
+  #
+  # Equations for ellipse (NOTE: assumes ellipse is centered at 0,0)
+  # 
+  #       x = a * cos(t)
+  #       y = b * sin(t)
+  #
+  # x,y — coordinates of any point on the ellipse (known)
+  # a,b — radii/axes (we'd like to know)
+  # t   — some super secret parameter (angle from origin to
+  #       the point on ellipse, if ellipse was squished to 
+  #       a regular circle)
+  #
+  # Let's make our work easier and pretend we started drawing at 0,0 instead
+  # of wherever the center of the ellipse is. Subtract center from coords:
+
+ 
 def autobubble_layer(t_img, t_drawable, layer, bubble_layer, isRound, minStepSize, pad):
   # args:
   #     t_img
