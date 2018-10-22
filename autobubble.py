@@ -30,7 +30,7 @@ def get_layer_stack_position(layer, group):
         return iterator_pos
       iterator_pos = iterator_pos + 1
 
-  return 0; # for some reason we didn't find proper position of layer in the stack     
+  return 0  # for some reason we didn't find proper position of layer in the stack     
 
 def add_layer_below_currently_selected(img):
   stack_pos = 0
@@ -72,13 +72,13 @@ def findRowStart(layer, pixel_region, currentRow):
       # as every marked row needs to have at least one non-transparent pixel, so this will
       # always be true sooner or later
       if pixel_region[x,y][3] != '\x00':
-        return x    
+        return x
 
 def findRowEnd(layer, pixel_region, currentRow):
   for x in range(layer.width - 1, -1, -1):
     for y in xrange(currentRow[0], currentRow[1]):
       if pixel_region[x,y][3] != '\x00':
-        return x
+        return x + 1
 
 
 # determine boundaries of text rows
@@ -114,7 +114,7 @@ def determineTextRows(layer):
       #
     if pixel_region[0,y][0] == '\x00' and isMarked:
       isMarked = False
-      rows[currentRow].append(y)
+      rows[currentRow].append(y - 1)
       rows[currentRow] = findRowStartEnd(layer, pixel_region, rows[currentRow])      
       currentRow += 1
   #
@@ -140,26 +140,26 @@ def correctRows(rows, minStepSize):
   
   # correct jags in the left edge
   for i in xrange(0, len(rows) - 2):
-    jag = findJag(rows[i][2], rows[i+1][2])
-    if jag == 1:
-      rows[i+1][2] = rows[i][2]
+    jag = findJag(rows[i][2], rows[i+1][2], minStepSize)
     if jag == -1:
+      rows[i+1][2] = rows[i][2]
+    if jag == 1:
       # in this case, we correct back, naively. We don't check whether re-adjustment
       # would cause the jag to grow to acceptable size. I don't think the complicated
       # nature of the work would make that worth it, but I'll accept a PR
       rows[i][2] = rows[i+1][2]
-      if i > 1:
+      if i > 0:
         for j in range(i - 1, -1, -1):
           rows[j][2] = rows[i][2]
   
   # now correct the other edge, but mind that meanings of findJag() have flipped
   for i in xrange(0, len(rows) - 2):
-    jag = findJag(rows[i][3], rows[i+1][3])
-    if jag == -1:
-      rows[i+1][3] = rows[i][3]
+    jag = findJag(rows[i][3], rows[i+1][3], minStepSize)
     if jag == 1:
+      rows[i+1][3] = rows[i][3]
+    if jag == -1:
       rows[i][3] = rows[i+1][3]
-      if i > 1:
+      if i > 0:
         for j in range(i - 1, -1, -1):
           rows[j][3] = rows[i][3]
   
@@ -189,8 +189,6 @@ def drawRectangularBubble(image, rows, layer, bubble_layer, xpad, ypad):
     # image, operation (0 - add), x, y, w, h)
     pdb.gimp_image_select_rectangle(image, 0, select_x, select_y, select_w, select_h)
     # drawable/layer, fill mode (1 - bg), x, y (anywhere goes cos selection)
-    pdb.gimp_drawable_edit_bucket_fill(bubble_layer, 1, 1, 1)
-
     # ensure current row is connected with row on top (unless the gap between two rows is
     # bigger than our treshold)
     if i > 0 and rows[i][0] - rows[i-1][1] < connect_rows_treshold:
@@ -198,8 +196,9 @@ def drawRectangularBubble(image, rows, layer, bubble_layer, xpad, ypad):
       select_w = min(rows[i][3], rows[i-1][3]) - select_x + (2*xpad)
       select_x += offset_x - xpad
 
-      pdb.gimp_image_select_rectangle(select_x, rows[i-1][1], select_w, rows[i][0])
-      pdb.gimp_drawable_edit_bucket_fill(bubble_layer, 1, 1, 1)
+      pdb.gimp_image_select_rectangle(image, 0, select_x, rows[i-1][1], select_w, rows[i][0])
+    
+    pdb.gimp_edit_bucket_fill_full(bubble_layer, 1, 28, 100, 0, 0, 1, 0, 1, 1)
 
   # end
 
@@ -266,9 +265,9 @@ def getEllipseDimensions(rows):
     opposing_y.append([rows[i][0], rows[i][1]])
     center_y.append(float(rows[i][0] + rows[i][1]) / 2)
 
-  print ("opposing x & center")
-  print (opposing_x)
-  print (center_x)
+  # print ("opposing x & center")
+  # print (opposing_x)
+  # print (center_x)
  
   avg_x = sum(center_x) / float(len(center_x))
   avg_y = sum(center_y) / float(len(center_y))
@@ -314,9 +313,6 @@ def getEllipseDimensions(rows):
     if opposing_x[i][1] > maxx:
       maxx = opposing_x[i][1]
 
-  print ("opposing x:")
-  print (opposing_x)
-
   for i in xrange(0, len(opposing_y)):
     opposing_y[i][0] -= avg_y
     opposing_y[i][1] -= avg_y
@@ -330,14 +326,15 @@ def getEllipseDimensions(rows):
     if opposing_x[i][1] > maxy:
       maxy = opposing_y[i][1]
 
-  print ("opposing y:")
-  print (opposing_y)
-
   # calculate some basic width and height
   innerWidth = maxx - minx
   innerHeight = maxy - miny
   
   xSquashRatio = innerHeight / innerWidth
+
+  print ("--- x: min/max, y: min/max, width/height")
+  print ([minx, maxx, miny, maxy, innerWidth, innerHeight])
+  print("squash ratio: {}".format(xSquashRatio) )
 
   new_w = 0
   new_h = 0
@@ -349,10 +346,10 @@ def getEllipseDimensions(rows):
     # from opposing side, as long as we get axes and pairings right
 
     half_i = i // 2
-    t = math.atan2((opposing_x[i][0] * xSquashRatio), opposing_y[half_i][0])
+    t = math.atan2(opposing_y[half_i][0], (opposing_x[i][0] * xSquashRatio))
 
-    new_w = (opposing_x[i][0] / math.cos(t)) * 2
-    new_h = (opposing_y[half_i][0] / math.sin(t)) * 2
+    new_w = abs((opposing_x[i][0] / math.cos(t)) * 2) * xSquashRatio
+    new_h = abs((opposing_y[half_i][0] / math.sin(t)) * 2)
   
     # not quite correct, but we'll just assume that both width and 
     # height increase at the asme time so ok I guess
@@ -364,9 +361,9 @@ def getEllipseDimensions(rows):
     
 
     # repeat for the second opposing point in the pair
-    t = math.atan2((opposing_x[i][1] * xSquashRatio), opposing_y[half_i][1])
+    t = math.atan2(opposing_y[half_i][1], (opposing_x[i][1] * xSquashRatio))
 
-    new_w = abs( (opposing_x[i][1] / math.cos(t)) * 2)
+    new_w = abs( (opposing_x[i][1] / math.cos(t)) * 2) * xSquashRatio
     new_h = abs( (opposing_y[half_i][1] / math.sin(t)) * 2)
 
     # not quite correct, but we'll just assume that both width and 
@@ -377,6 +374,8 @@ def getEllipseDimensions(rows):
     if new_h > innerHeight:
       innerHeight = new_h
 
+  print ("final x/y offsets & width/height")
+  print ( [avg_x, avg_y, innerWidth, innerHeight] )
 
   return [avg_x, avg_y, innerWidth, innerHeight]
 
@@ -409,7 +408,8 @@ def drawEllipseBubble(image, rows, layer, bubble_layer, xpad, ypad):
 
   # image, operation (0 - add), x, y, w, h)
   pdb.gimp_image_select_ellipse(image, 0, select_x, select_y, select_w, select_h)
-  pdb.gimp_drawable_edit_bucket_fill(bubble_layer, 1, 1, 1)
+  # pdb.gimp_drawable_edit_bucket_fill(bubble_layer, 1, 1, 1)
+  pdb.gimp_edit_bucket_fill_full(bubble_layer, 1, 28, 100, 0, 0, 1, 0, 1, 1)
 
 
  
@@ -430,7 +430,7 @@ def autobubble_layer(t_img, t_drawable, layer, bubble_layer, isRound, minStepSiz
   # prevent some jaggedness. 
   if not isRound:
     text_rows = correctRows(text_rows, minStepSize)
-    drawRectangularBubble(text_rows, layer, bubble_layer)
+    drawRectangularBubble(t_img, text_rows, layer, bubble_layer, 3, 3)
 
 
 
