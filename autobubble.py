@@ -202,7 +202,54 @@ def drawRectangularBubble(image, rows, layer, bubble_layer, xpad, ypad):
 
   # end
 
+def calculateEllipseBounds(opposing_x, opposing_y, aspectRatio)
+
+  width = 0
+  height = 0
+  new_w = 0
+  new_h = 0
+
+  # start calculating ellipses for every point we deemed worthy
+  for i in xrange(0, len(opposing_x)):
+    # first, squash the ellipse into a circle
+    # here's a fun fact: we don't need to pair correct coordinates
+    # from opposing side, as long as we get axes and pairings right
+
+    half_i = i // 2
+    t = math.atan2(opposing_y[half_i][0], (opposing_x[i][0] * aspectRatio))
+
+    new_w = abs((opposing_x[i][0] / math.cos(t)) * 2) * aspectRatio
+    new_h = abs((opposing_y[half_i][0] / math.sin(t)) * 2)
+  
+    # not quite correct, but we'll just assume that both width and 
+    # height increase at the asme time so ok I guess
+    if new_w > innerWidth:
+      innerWidth = new_w
+    
+    if new_h > innerHeight:
+      innerHeight = new_h
+    
+
+    # repeat for the second opposing point in the pair
+    t = math.atan2(opposing_y[half_i][1], (opposing_x[i][1] * aspectRatio))
+
+    new_w = abs( (opposing_x[i][1] / math.cos(t)) * 2) * aspectRatio
+    new_h = abs( (opposing_y[half_i][1] / math.sin(t)) * 2)
+
+    # not quite correct, but we'll just assume that both width and 
+    # height increase at the asme time so ok I guess
+    if new_w > innerWidth:
+      width = new_w
+    
+    if new_h > innerHeight:
+      height = new_h
+  
+  return [width, height]
+
 def getEllipseDimensions(rows):
+  # consider making this an argument:
+  iterations = 10
+
   # uh oh
   #
   # returns [x,y,width,height]
@@ -250,25 +297,20 @@ def getEllipseDimensions(rows):
         opposing_y.append([rows[i][0], rows[j][1]])
         center_y.append((rows[i][0] + rows[j][1]) / 2)
 
-  # FIXME: there's something potentially wrong here, these numbers are way too big
   if rowCount % 2 == 1:     # btw this catches cases where len = 1
     i = rowCount // 2       # this also works both for middle line and cases 
                             # where len = 1
     
-    # we don't need to do that, strictly speaking, but let's duplicate x
-    # because we did that with all the other line combos
+    # since we're adding middle last, this won't have a negative effect
+    # later on where we rely on 'y' arrays having half the elements of 'x' 
+    # arrays
     opposing_x.append([rows[i][2], rows[i][3]])
-    opposing_x.append([rows[i][2], rows[i][3]])
-    center_x.append(float(rows[i][0] + rows[i][1]) / 2)
     center_x.append(float(rows[i][0] + rows[i][1]) / 2)
 
     opposing_y.append([rows[i][0], rows[i][1]])
     center_y.append(float(rows[i][0] + rows[i][1]) / 2)
 
-  # print ("opposing x & center")
-  # print (opposing_x)
-  # print (center_x)
- 
+
   avg_x = sum(center_x) / float(len(center_x))
   avg_y = sum(center_y) / float(len(center_y))
 
@@ -336,46 +378,48 @@ def getEllipseDimensions(rows):
   print ([minx, maxx, miny, maxy, innerWidth, innerHeight])
   print("squash ratio: {}".format(xSquashRatio) )
 
-  new_w = 0
-  new_h = 0
-
-  # start calculating ellipses for every point we deemed worthy
-  for i in xrange(0, len(opposing_x)):
-    # first, squash the ellipse into a circle
-    # here's a fun fact: we don't need to pair correct coordinates
-    # from opposing side, as long as we get axes and pairings right
-
-    half_i = i // 2
-    t = math.atan2(opposing_y[half_i][0], (opposing_x[i][0] * xSquashRatio))
-
-    new_w = abs((opposing_x[i][0] / math.cos(t)) * 2) * xSquashRatio
-    new_h = abs((opposing_y[half_i][0] / math.sin(t)) * 2)
+  [innerWidth, innerHeight] = calculateEllipseBounds(opposing_x, opposing_y, xSquashRatio)
   
-    # not quite correct, but we'll just assume that both width and 
-    # height increase at the asme time so ok I guess
-    if new_w > innerWidth:
-      innerWidth = new_w
-    
-    if new_h > innerHeight:
-      innerHeight = new_h
-    
+  # tighten ellipse a little bit, using brute force
+  #
+  # since we're only interested in size differences rather than exact
+  # area size, we can ignore the PI and everything. 
+  bestArea = innerWidth * innerHeight
 
-    # repeat for the second opposing point in the pair
-    t = math.atan2(opposing_y[half_i][1], (opposing_x[i][1] * xSquashRatio))
-
-    new_w = abs( (opposing_x[i][1] / math.cos(t)) * 2) * xSquashRatio
-    new_h = abs( (opposing_y[half_i][1] / math.sin(t)) * 2)
-
-    # not quite correct, but we'll just assume that both width and 
-    # height increase at the asme time so ok I guess
-    if new_w > innerWidth:
-      innerWidth = new_w
+  # TODO: optimize for cases where xSquashRatio comes out to be 1
+  # shouldn't happen too often, though, so performing twice as much 
+  # work once in a blue moon isn't that bad
+  new_h = innerHeight
+  new_w = innerWidth
+  arlt = xSquashRatio * 0.5
+  argt = xSquashRatio * 2
+  newBestArea = bestArea
+  for i in xrange(1, iterations):
+    if xSquashRatio <= 1:
+      [new_h, new_w] = calculateEllipseBounds(opposing_x, opposing_y, arlt)
+      newBestArea = new_h * new_w
+      if newBestArea < bestArea:
+        innerHeight = new_h
+        innerWidth = new_w
+        bestArea = newBestArea
+        arlt -= xSquashRatio * (2 ** -i)
+      else:
+        arlt += xSquashRatio * (2 ** -i)
     
-    if new_h > innerHeight:
-      innerHeight = new_h
+    if xSquashRatio >= 1:
+      [new_h, new_w] = calculateEllipseBounds(opposing_x, opposing_y, argt)
+      newBestArea = new_h * new_w
+      if newBestArea < bestArea:
+        innerHeight = new_h
+        innerWidth = new_w
+        bestArea = newBestArea
+        argt += xSquashRatio * (2 ** i)
+      else:
+        argt += xSquashRatio * (2 ** i)
+
 
   print ("final x/y offsets & width/height")
-  print ( [avg_x, avg_y, innerWidth, innerHeight] )
+  print ( [avg_x, avg_y, edges[0], edges[1]] )
 
   return [avg_x, avg_y, innerWidth, innerHeight]
 
