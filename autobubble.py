@@ -202,10 +202,11 @@ def drawRectangularBubble(image, rows, layer, bubble_layer, xpad, ypad):
 
   # end
 
-def calculateEllipseBounds(opposing_x, opposing_y, aspectRatio)
+def calculateEllipseBounds(opposing_x, opposing_y, width, height, aspectRatio):
+  # width, height - max width and max height of the text
 
-  width = 0
-  height = 0
+  # width = 0
+  # height = 0
   new_w = 0
   new_h = 0
 
@@ -218,16 +219,15 @@ def calculateEllipseBounds(opposing_x, opposing_y, aspectRatio)
     half_i = i // 2
     t = math.atan2(opposing_y[half_i][0], (opposing_x[i][0] * aspectRatio))
 
-    new_w = abs((opposing_x[i][0] / math.cos(t)) * 2) * aspectRatio
+    new_w = abs((opposing_x[i][0] * aspectRatio / math.cos(t)) * 2)
     new_h = abs((opposing_y[half_i][0] / math.sin(t)) * 2)
   
     # not quite correct, but we'll just assume that both width and 
     # height increase at the asme time so ok I guess
-    if new_w > innerWidth:
-      innerWidth = new_w
-    
-    if new_h > innerHeight:
-      innerHeight = new_h
+    if new_w > width:
+      width = new_w
+    if new_h > height:
+      height = new_h
     
 
     # repeat for the second opposing point in the pair
@@ -238,10 +238,9 @@ def calculateEllipseBounds(opposing_x, opposing_y, aspectRatio)
 
     # not quite correct, but we'll just assume that both width and 
     # height increase at the asme time so ok I guess
-    if new_w > innerWidth:
+    if new_w > width:
       width = new_w
-    
-    if new_h > innerHeight:
+    if new_h > height:
       height = new_h
   
   return [width, height]
@@ -288,14 +287,14 @@ def getEllipseDimensions(rows):
         #    [...               ...]
         #        [xxxx row 2 xxxx]
         #
-        opposing_x.append([rows[i][2], rows[j][3]])
+        opposing_x.append([float(rows[i][2]), float(rows[j][3])])
         center_x.append(float(rows[i][2] + rows[j][3]) / 2)
-        opposing_x.append([rows[i][3], rows[j][2]])
+        opposing_x.append([float(rows[i][3]), float(rows[j][2])])
         center_x.append(float(rows[i][3] + rows[j][2]) / 2)
         
         # there's no vertical skew like that
-        opposing_y.append([rows[i][0], rows[j][1]])
-        center_y.append((rows[i][0] + rows[j][1]) / 2)
+        opposing_y.append([float(rows[i][0]), float(rows[j][1])])
+        center_y.append(float(rows[i][0] + rows[j][1]) / 2)
 
   if rowCount % 2 == 1:     # btw this catches cases where len = 1
     i = rowCount // 2       # this also works both for middle line and cases 
@@ -304,10 +303,12 @@ def getEllipseDimensions(rows):
     # since we're adding middle last, this won't have a negative effect
     # later on where we rely on 'y' arrays having half the elements of 'x' 
     # arrays
-    opposing_x.append([rows[i][2], rows[i][3]])
+    opposing_x.append([float(rows[i][2]), float(rows[i][3])])
+    center_x.append(float(rows[i][0] + rows[i][1]) / 2)
+    opposing_x.append([float(rows[i][2]), float(rows[i][3])])
     center_x.append(float(rows[i][0] + rows[i][1]) / 2)
 
-    opposing_y.append([rows[i][0], rows[i][1]])
+    opposing_y.append([float(rows[i][0]), float(rows[i][1])])
     center_y.append(float(rows[i][0] + rows[i][1]) / 2)
 
 
@@ -368,6 +369,14 @@ def getEllipseDimensions(rows):
     if opposing_x[i][1] > maxy:
       maxy = opposing_y[i][1]
 
+  print ("-------------------------------")
+  print ("POST: opposing x:")
+  print (opposing_x)
+  print ("POST: opposing y:")
+  print (opposing_y)
+  print ("POST: avg center")
+  print ([avg_x, avg_y])
+
   # calculate some basic width and height
   innerWidth = maxx - minx
   innerHeight = maxy - miny
@@ -378,7 +387,10 @@ def getEllipseDimensions(rows):
   print ([minx, maxx, miny, maxy, innerWidth, innerHeight])
   print("squash ratio: {}".format(xSquashRatio) )
 
-  [innerWidth, innerHeight] = calculateEllipseBounds(opposing_x, opposing_y, xSquashRatio)
+  text_w = innerWidth
+  text_h = innerHeight
+
+  [innerWidth, innerHeight] = calculateEllipseBounds(opposing_x, opposing_y, text_w, text_h, xSquashRatio)
   
   # tighten ellipse a little bit, using brute force
   #
@@ -394,32 +406,34 @@ def getEllipseDimensions(rows):
   arlt = xSquashRatio * 0.5
   argt = xSquashRatio * 2
   newBestArea = bestArea
-  for i in xrange(1, iterations):
-    if xSquashRatio <= 1:
-      [new_h, new_w] = calculateEllipseBounds(opposing_x, opposing_y, arlt)
+  
+  if xSquashRatio <= 1:
+    for i in xrange(1, iterations):
+      [new_w, new_h] = calculateEllipseBounds(opposing_x, opposing_y, text_w, text_h, arlt)
       newBestArea = new_h * new_w
       if newBestArea < bestArea:
         innerHeight = new_h
         innerWidth = new_w
         bestArea = newBestArea
-        arlt -= xSquashRatio * (2 ** -i)
-      else:
         arlt += xSquashRatio * (2 ** -i)
+      else:
+        arlt -= xSquashRatio * (2 ** -i)
     
-    if xSquashRatio >= 1:
-      [new_h, new_w] = calculateEllipseBounds(opposing_x, opposing_y, argt)
+  if xSquashRatio >= 1:
+    for i in xrange(1, iterations):
+      [new_w, new_h] = calculateEllipseBounds(opposing_x, opposing_y, text_w, text_h, argt)
       newBestArea = new_h * new_w
       if newBestArea < bestArea:
         innerHeight = new_h
         innerWidth = new_w
         bestArea = newBestArea
-        argt += xSquashRatio * (2 ** i)
+        argt -= xSquashRatio * (2 ** -i)
       else:
-        argt += xSquashRatio * (2 ** i)
+        argt += xSquashRatio * (2 ** -i)
 
 
   print ("final x/y offsets & width/height")
-  print ( [avg_x, avg_y, edges[0], edges[1]] )
+  print ( [avg_x, avg_y, innerWidth, innerHeight] )
 
   return [avg_x, avg_y, innerWidth, innerHeight]
 
