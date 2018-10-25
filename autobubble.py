@@ -202,7 +202,57 @@ def drawRectangularBubble(image, rows, layer, bubble_layer, xpad, ypad):
 
   # end
 
-def calculateEllipseBounds(opposing_x, opposing_y, width, height, aspectRatio):
+def getSolutionVectorSpace(points):
+  matrix = [
+    [points[0][0] ** 2, points[0][1] ** 2, points[0][0], points[0][1], 1],
+    [points[1][0] ** 2, points[1][1] ** 2, points[1][0], points[1][1], 1],
+    [points[2][0] ** 2, points[2][1] ** 2, points[2][0], points[2][1], 1],
+    [points[3][0] ** 2, points[3][1] ** 2, points[3][0], points[3][1], 1]
+  ]
+  # dont do this
+  rows = 4
+  cols = 5
+
+  row = 0; col = 0
+
+  while row < rows and col < cols:
+    maxElement = abs(matrix[row][col])
+    maxRow = row
+
+    # find the pivot in the first column, swap rows if neccessary
+    for j in xrange(row+1, rows):
+      if abs(matrix[j][col]) > maxElement:
+        maxElement = abs(matrix[j][col])
+        maxRow = j
+    
+    # if there's no pivot, skip this column
+    if matrix[maxRow][col] == 0:
+      col += 1
+      continue
+
+    # swap rows if neccessary
+    if maxRow != row:
+      for i in xrange(col, cols):
+        tmp = matrix[row][i]
+        matrix[row][i] = matrix[maxRow][i]
+        matrix[maxRow][i] = tmp
+    
+    # for all rows under pivot, do this
+    for i in xrange(row + 1, rows):
+      factor = matrix[i][col] / matrix[row][col]
+      matrix[i][col] = 0              # fill column below pivot with zeroes
+      for j in xrange(col + 1, cols): # for all elements in current row
+        matrix[i][j] = matrix[i][j] - matrix[row][j] * factor
+    
+    row += 1
+    col += 1
+      
+  return matrix
+
+
+
+
+def calculateEllipseBounds(opposing_x, opposing_y, width, height, aspectRatio, arDelta = None):
   # width, height - max width and max height of the text
 
   # width = 0
@@ -425,7 +475,7 @@ def getEllipseDimensions(rows):
       newBestArea = new_h * new_w
       if newBestArea < bestArea:
         innerHeight = new_h
-        innerWidth = new_w
+        innerWidth = new_wsig
         bestArea = newBestArea
         argt -= xSquashRatio * (2 ** -i)
       else:
