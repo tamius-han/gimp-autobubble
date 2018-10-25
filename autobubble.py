@@ -259,12 +259,15 @@ def calculateEllipseBounds(points):
   bestArea = -1
   bestBounds = [0, 0, -1, -1]
 
-  for perm in itertools.permutations(edgePoints):
-    matrix = getSolutionVectorSpaceInverted(perm)
+  for combination in itertools.combinations(edgePoints):
+    matrix = getSolutionVectorSpaceInverted(combination)
 
     for [a,b,c,d,e] in matrix:
-      # letter-to-index conversion:
-
+      # we're using abcd (and mx, my, s, rx, and ry) because mathexchange answer this
+      # algorithm is based on used these letters. Using same letters makes following 
+      # this answer truly that much easier
+      #    src: https://math.stackexchange.com/questions/207685/how-to-find-the-minimal-axis-parallel-ellipse-enclosing-a-set-of-points
+      #
       # we know we're looking at ellipse if:
       #   * a and b have the same sign (both negative or both positive)
       #   * neither a nor b is zero
