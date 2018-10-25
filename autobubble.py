@@ -10,6 +10,7 @@
 
 import math
 import copy
+import itertools
 from gimpfu import *
 
 # I tried looking for proper solution that gets position of a given layer
@@ -202,7 +203,7 @@ def drawRectangularBubble(image, rows, layer, bubble_layer, xpad, ypad):
 
   # end
 
-def getSolutionVectorSpace(points):
+def getSolutionVectorSpaceInverted(points):
   matrix = [
     [points[0][0] ** 2, points[0][1] ** 2, points[0][0], points[0][1], 1],
     [points[1][0] ** 2, points[1][1] ** 2, points[1][0], points[1][1], 1],
@@ -246,59 +247,70 @@ def getSolutionVectorSpace(points):
     
     row += 1
     col += 1
-      
+  
+  # invert pls
+  for r in rows:
+    for c in cols:
+      matrix[r][c] = 1.0 / matrix[r][c]
+
   return matrix
 
+def calculateEllipseBounds(points):
+  bestArea = -1
+  bestBounds = [0, 0, -1, -1]
 
+  for perm in itertools.permutations(edgePoints):
+    matrix = getSolutionVectorSpaceInverted(perm)
 
+    for [a,b,c,d,e] in matrix:
+      # letter-to-index conversion:
 
-def calculateEllipseBounds(opposing_x, opposing_y, width, height, aspectRatio, arDelta = None):
-  # width, height - max width and max height of the text
+      # we know we're looking at ellipse if:
+      #   * a and b have the same sign (both negative or both positive)
+      #   * neither a nor b is zero
+      # we skip those vectors
+      if a * b <= 0:
+        continue
 
-  # width = 0
-  # height = 0
-  new_w = 0
-  new_h = 0
+      # that's the center of the ellipse
+      mx = - c / (2 * a)
+      my = - d / (2 * b)
 
-  # start calculating ellipses for every point we deemed worthy
-  for i in xrange(0, len(opposing_x)):
-    # first, squash the ellipse into a circle
-    # here's a fun fact: we don't need to pair correct coordinates
-    # from opposing side, as long as we get axes and pairings right
+      # s stands for ... something? idk
+      s = (c ** 2) / (4 * a) + (f ** 2) / (4 * b) - e
 
-    half_i = i // 2
-    t = math.atan2(opposing_y[half_i][0], (opposing_x[i][0] * aspectRatio))
+      # check if all points are inside or, at worst, on the ellipse
+      inEllipse = True
+      for p in points:
+        res = (a/s) * ((p[0] - mx) ** 2) + (b/s) * ((p[1] - my) ** 2)
 
-    new_w = abs((opposing_x[i][0] * aspectRatio / math.cos(t)) * 2)
-    new_h = abs((opposing_y[half_i][0] / math.sin(t)) * 2)
-  
-    # not quite correct, but we'll just assume that both width and 
-    # height increase at the asme time so ok I guess
-    if new_w > width:
-      width = new_w
-    if new_h > height:
-      height = new_h
-    
+        # if this happens, the point is outside the ellipse. Stop searching
+        if res > 1:
+          inEllipse = False
+          break
 
-    # repeat for the second opposing point in the pair
-    t = math.atan2(opposing_y[half_i][1], (opposing_x[i][1] * aspectRatio))
+      if not inEllipse:
+        continue
 
-    new_w = abs( (opposing_x[i][1] / math.cos(t)) * 2) * aspectRatio
-    new_h = abs( (opposing_y[half_i][1] / math.sin(t)) * 2)
+      # so all the points are inside the ellipse. Let's find radius.
+      rx = (s / a) ** 0.5
+      ry = (s / b) ** 0.5
 
-    # not quite correct, but we'll just assume that both width and 
-    # height increase at the asme time so ok I guess
-    if new_w > width:
-      width = new_w
-    if new_h > height:
-      height = new_h
-  
-  return [width, height]
+      # did we already find an ellipse? If no, this is the best candidate
+      # so far and we'll mark it down later.
+      # if yes, we check if the new ellipse is smaller than the old one
+      if bestArea > 0:
+        nbb = rx * ry
+        if nbb < bestArea:
+          bestArea = nbb
+          bestBounds = [mx, my, rx, ry]
+      else:
+        bestArea = rx * ry
+        bestBounds = [mx, my, rx, ry]
+
+  return bestBounds
 
 def getEllipseDimensions(rows):
-  # consider making this an argument:
-  iterations = 10
-
   # uh oh
   #
   # returns [x,y,width,height]
@@ -307,12 +319,9 @@ def getEllipseDimensions(rows):
   #      * inside the ellipse
   #      * as close as possible to the edge of the ellipse.
   #
-  # That's a bit hard, though, so we'll have to do with an approximation:
-  #      * calculate the "center" of the ellipse (average 
-  #        middle point of all diagonals)
-  #      * determine which point is the furthest from the
-  #        middle point
-  #      * draw ellipse through that point
+  # That's a bit hard, though, so we'll have to do with an approximation.
+  # see: https://math.stackexchange.com/questions/207685/how-to-find-the-minimal-axis-parallel-ellipse-enclosing-a-set-of-points
+  # and even this is cancer so ...
   #  
   # Quick reminder. Rows coords are like this: top, bottom, left, right 
   #
@@ -322,172 +331,19 @@ def getEllipseDimensions(rows):
 
   rowCount = len(rows)
 
-  opposing_x = []
-  opposing_y = []
-  center_x = []
-  center_y = []
+  edgePoints = []
 
-  if rowCount > 1:    # having one row is a bit of a special case
-    for i in xrange(0, rowCount // 2):
-      for j in range(rowCount - 1, (rowCount // 2), -1):
-        # we need both to account for left/right skew, e.g if
-        # rows are aligned like this:
-        #    
-        #      [xxxx row 1 xxxx]
-        #    [...               ...]
-        #        [xxxx row 2 xxxx]
-        #
-        opposing_x.append([float(rows[i][2]), float(rows[j][3])])
-        center_x.append(float(rows[i][2] + rows[j][3]) / 2)
-        opposing_x.append([float(rows[i][3]), float(rows[j][2])])
-        center_x.append(float(rows[i][3] + rows[j][2]) / 2)
-        
-        # there's no vertical skew like that
-        opposing_y.append([float(rows[i][0]), float(rows[j][1])])
-        center_y.append(float(rows[i][0] + rows[j][1]) / 2)
+  # handle the top edges of the top half of the rows
+  for i in xrange(0, -(-rowCount // 2)):
+    edgePoints.append([float(rows[i][2]), float(rows[i][0])])
+    edgePoints.append([float(rows[i][3]), float(rows[i][0])])
 
-  if rowCount % 2 == 1:     # btw this catches cases where len = 1
-    i = rowCount // 2       # this also works both for middle line and cases 
-                            # where len = 1
-    
-    # since we're adding middle last, this won't have a negative effect
-    # later on where we rely on 'y' arrays having half the elements of 'x' 
-    # arrays
-    opposing_x.append([float(rows[i][2]), float(rows[i][3])])
-    center_x.append(float(rows[i][0] + rows[i][1]) / 2)
-    opposing_x.append([float(rows[i][2]), float(rows[i][3])])
-    center_x.append(float(rows[i][0] + rows[i][1]) / 2)
+  for i in xrange(rowCount // 2, rowCount):
+    edgePoints.append([float(rows[i][2]), float(rows[i][1])])
+    edgePoints.append([float(rows[i][3]), float(rows[i][1])])
 
-    opposing_y.append([float(rows[i][0]), float(rows[i][1])])
-    center_y.append(float(rows[i][0] + rows[i][1]) / 2)
-
-
-  avg_x = sum(center_x) / float(len(center_x))
-  avg_y = sum(center_y) / float(len(center_y))
-
-  # middle point of the ellipse is now at avg_x, avg_y (relative to text layer)
-  #
-  # https://www.mathopenref.com/coordparamellipse.html
-  #
-  # Equations for ellipse (NOTE: assumes ellipse is centered at 0,0)
-  # 
-  #       x = a * cos(t)
-  #       y = b * sin(t)
-  #
-  # x,y - coordinates of any point on the ellipse (known)
-  # a,b - radii/axes (we'd like to know)
-  # t   - some super secret parameter (angle from origin to
-  #       the point on ellipse, if ellipse was squished to 
-  #       a regular circle)
-  #
-  # Let's make our work easier and pretend we started drawing at 0,0 instead
-  # of wherever the center of the ellipse is. Subtract center from coords:
+  return bounds = calculateEllipseBounds(edgePoints)
   
-  minx = 0
-  maxx = 0
-  miny = 0
-  maxy = 0
-
-  print ("START: opposing x:")
-  print (opposing_x)
-  print ("START: opposing y:")
-  print (opposing_y)
-
-  for i in xrange(0, len(opposing_x)):
-    opposing_x[i][0] -= avg_x
-    opposing_x[i][1] -= avg_x
-
-    if opposing_x[i][0] < minx:
-      minx = opposing_x[i][0]
-    if opposing_x[i][0] > maxx:
-      maxx = opposing_x[i][0]
-    if opposing_x[i][1] < minx:
-      minx = opposing_x[i][1]
-    if opposing_x[i][1] > maxx:
-      maxx = opposing_x[i][1]
-
-  for i in xrange(0, len(opposing_y)):
-    opposing_y[i][0] -= avg_y
-    opposing_y[i][1] -= avg_y
-
-    if opposing_y[i][0] < miny:
-      miny = opposing_y[i][0]
-    if opposing_y[i][0] > maxy:
-      maxy = opposing_y[i][0]
-    if opposing_y[i][1] < miny:
-      miny = opposing_y[i][1]
-    if opposing_x[i][1] > maxy:
-      maxy = opposing_y[i][1]
-
-  print ("-------------------------------")
-  print ("POST: opposing x:")
-  print (opposing_x)
-  print ("POST: opposing y:")
-  print (opposing_y)
-  print ("POST: avg center")
-  print ([avg_x, avg_y])
-
-  # calculate some basic width and height
-  innerWidth = maxx - minx
-  innerHeight = maxy - miny
-  
-  xSquashRatio = innerHeight / innerWidth
-
-  print ("--- x: min/max, y: min/max, width/height")
-  print ([minx, maxx, miny, maxy, innerWidth, innerHeight])
-  print("squash ratio: {}".format(xSquashRatio) )
-
-  text_w = innerWidth
-  text_h = innerHeight
-
-  [innerWidth, innerHeight] = calculateEllipseBounds(opposing_x, opposing_y, text_w, text_h, xSquashRatio)
-  
-  # tighten ellipse a little bit, using brute force
-  #
-  # since we're only interested in size differences rather than exact
-  # area size, we can ignore the PI and everything. 
-  bestArea = innerWidth * innerHeight
-
-  # TODO: optimize for cases where xSquashRatio comes out to be 1
-  # shouldn't happen too often, though, so performing twice as much 
-  # work once in a blue moon isn't that bad
-  new_h = innerHeight
-  new_w = innerWidth
-  arlt = xSquashRatio * 0.5
-  argt = xSquashRatio * 2
-  newBestArea = bestArea
-  
-  if xSquashRatio <= 1:
-    for i in xrange(1, iterations):
-      [new_w, new_h] = calculateEllipseBounds(opposing_x, opposing_y, text_w, text_h, arlt)
-      newBestArea = new_h * new_w
-      if newBestArea < bestArea:
-        innerHeight = new_h
-        innerWidth = new_w
-        bestArea = newBestArea
-        arlt += xSquashRatio * (2 ** -i)
-      else:
-        arlt -= xSquashRatio * (2 ** -i)
-    
-  if xSquashRatio >= 1:
-    for i in xrange(1, iterations):
-      [new_w, new_h] = calculateEllipseBounds(opposing_x, opposing_y, text_w, text_h, argt)
-      newBestArea = new_h * new_w
-      if newBestArea < bestArea:
-        innerHeight = new_h
-        innerWidth = new_wsig
-        bestArea = newBestArea
-        argt -= xSquashRatio * (2 ** -i)
-      else:
-        argt += xSquashRatio * (2 ** -i)
-
-
-  print ("final x/y offsets & width/height")
-  print ( [avg_x, avg_y, innerWidth, innerHeight] )
-
-  return [avg_x, avg_y, innerWidth, innerHeight]
-
-
 def drawEllipseBubble(image, rows, layer, bubble_layer, xpad, ypad):
   # making things more readable
 
