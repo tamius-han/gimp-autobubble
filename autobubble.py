@@ -7,6 +7,23 @@
 #     active layer:      <image>.active_layer()
 #
 # execfile('projects/gimp-autobubble/autobubble.py')
+#
+# debug cheat
+"""
+-- start --
+execfile('projects/gimp-autobubble/autobubble.py')
+image = gimp.image_list()[0]
+bubble_layer = image.active_layer
+
+
+layer = image.active_layer
+
+rows = determineTextRows(layer)
+drawEllipseBubble(image, rows, layer, bubble_layer, 0, 0)
+
+-- reload --
+execfile('projects/gimp-autobubble/autobubble.py')
+"""
 
 import math
 import copy
@@ -238,20 +255,31 @@ def getSolutionVectorSpaceInverted(points):
         matrix[row][i] = matrix[maxRow][i]
         matrix[maxRow][i] = tmp
     
-    # for all rows under pivot, do this
-    for i in xrange(row + 1, rows):
+    # pivot needs to be equal to 1, so divide the entire row with the pivot
+    # pivot = matrix[row][col]
+    # for i in xrange(0, cols):
+    #   matrix[row][i] /= pivot
+
+    # for all rows, do this
+    for i in xrange(0, rows):
+      if i == row:
+        continue
       factor = matrix[i][col] / matrix[row][col]
-      matrix[i][col] = 0              # fill column below pivot with zeroes
-      for j in xrange(col + 1, cols): # for all elements in current row
+      for j in xrange(0, cols): # for all elements in current row
+         # since points aren't terribly accurate, we round things close to two decimals
         matrix[i][j] = matrix[i][j] - matrix[row][j] * factor
+       
     
     row += 1
     col += 1
   
   # invert pls
-  for r in rows:
-    for c in cols:
-      matrix[r][c] = 1.0 / matrix[r][c]
+  # for r in xrange(0, rows):
+  #   for c in xrange(0, cols):
+  #     matrix[r][c] = round(matrix[r][c], 4)
+      
+  #     if matrix[r][c] != 0:
+  #       matrix[r][c] = round( (1.0 / matrix[r][c]), 4)
 
   return matrix
 
@@ -259,57 +287,135 @@ def calculateEllipseBounds(points):
   bestArea = -1
   bestBounds = [0, 0, -1, -1]
 
-  for combination in itertools.combinations(edgePoints):
+  for combination in itertools.combinations(points, 4):
+    print("")
+    print("")
+    print("<starting new loop>")
     matrix = getSolutionVectorSpaceInverted(combination)
 
-    for [a,b,c,d,e] in matrix:
-      # we're using abcd (and mx, my, s, rx, and ry) because mathexchange answer this
-      # algorithm is based on used these letters. Using same letters makes following 
-      # this answer truly that much easier
-      #    src: https://math.stackexchange.com/questions/207685/how-to-find-the-minimal-axis-parallel-ellipse-enclosing-a-set-of-points
-      #
-      # we know we're looking at ellipse if:
-      #   * a and b have the same sign (both negative or both positive)
-      #   * neither a nor b is zero
-      # we skip those vectors
-      if a * b <= 0:
+    print ("-----------------")
+    print ("new matrix with solution:")
+    for row in matrix:
+      print (row)
+
+    # we're using abcd (and mx, my, s, rx, and ry) because mathexchange answer this
+    # algorithm is based on used these letters. Using same letters makes following 
+    # this answer truly that much easier
+    #    src: https://math.stackexchange.com/a/207837
+    # 
+    # we can spot whether our group of points has a solution just by looking at the 
+    # matrix. If we get something like this (where 'x' is non-zero number, and 1 is
+    # a pivot (but not neccesarily actually equals 1)):
+    #
+    #        [ 1 0 x 0 0 ]
+    #        [ 0 1 0 x 0 ]
+    #        [ 0 0 0 0 1 ]
+    #        [ 0 0 0 0 0 ]
+    #
+    # In case like this, we can only determine the center.
+    #
+    # If we get something like this, things start to look slightly more promising:
+    #   
+    #     w:   [ 1 0 0 0 a ]
+    #     x:   [ 0 1 0 0 b ]
+    #     y:   [ 0 0 1 0 c ]
+    #     z:   [ 0 0 0 1 d ]
+    #
+    # If a, b, c, or d are 0, we're dealing with an invalid point combination (no 
+    # ellipse to be had here), so we'll just skip it. If all four are non-zero value,
+    # we'll do this:
+    #
+    #     w:   [ 1/a 0  0  0  a/a ]
+    #     x:   [  0 1/b 0  0  b/b ]
+    #     y:   [  0  0 1/c 0  c/c ]
+    #     z:   [  0  0  0 1/d d/d ]
+    #
+    # Now, 'a', 'b', 'c' and 'd' are all expressed as multiple (or fraction) of 'e'
+    # 
+    # Of course, a question quickly arises. What is e? I don't know, but in practice
+    # having 'e' set to -1 seems to work so far. 
+
+    centerOnly = matrix[0][0] != 0 and matrix[0][1] == 0 and matrix[0][2] != 0 and matrix[0][3] == 0 and matrix[0][4] == 0 \
+                 and matrix[1][1] != 0 and matrix[1][2] == 0 and matrix[1][3] != 0 or matrix[1][4] == 0 \
+                 and matrix[2][2] == 0 and matrix[2][3] == 0 and matrix[2][4] != 0
+
+    if centerOnly:
+      a = 1.0; b = 1.0; e = 0.0
+      c = matrix[0][0] / matrix[0][2]
+      d = matrix[0][0] / matrix[1][3]
+
+    else:
+      if matrix[0][4] == 0 or matrix[1][4] == 0 or matrix[2][4] == 0 or matrix[3][4] == 0:
+        print("one of the values is null")
         continue
 
-      # that's the center of the ellipse
-      mx = - c / (2 * a)
-      my = - d / (2 * b)
+      # now we can extract variables much the same way we did before:
+      a = (matrix[0][4]/matrix[0][0])
+      b = (matrix[1][4]/matrix[1][1])
+      c = (matrix[2][4]/matrix[2][2])
+      d = (matrix[3][4]/matrix[3][3])
+      e = -1
+      # c = - matrix[0][0] / matrix[0][2]
+      # d = - matrix[1][1] / matrix[1][3]
+    
+    
+    # we know we're looking at ellipse if:
+    #   * a and b have the same sign (both negative or both positive)
+    #   * neither a nor b is zero
+    # we skip those vectors
+    if a * b <= 0:
+      print("sign mismatch")
+      print("a: {}, b: {}".format(a,b))
+      continue
 
-      # s stands for ... something? idk
-      s = (c ** 2) / (4 * a) + (f ** 2) / (4 * b) - e
+    # that's the center of the ellipse
+    mx = - c / (2 * a)
+    my = - d / (2 * b)
 
-      # check if all points are inside or, at worst, on the ellipse
-      inEllipse = True
-      for p in points:
-        res = (a/s) * ((p[0] - mx) ** 2) + (b/s) * ((p[1] - my) ** 2)
+    # s stands for ... something? idk
+    s = (c ** 2) / (4 * a) + (d ** 2) / (4 * b) - e
 
-        # if this happens, the point is outside the ellipse. Stop searching
-        if res > 1:
-          inEllipse = False
-          break
 
-      if not inEllipse:
-        continue
+    # so all the points are inside the ellipse. Let's find radius.
+    rx = (s / a) ** 0.5
+    ry = (s / b) ** 0.5
 
-      # so all the points are inside the ellipse. Let's find radius.
-      rx = (s / a) ** 0.5
-      ry = (s / b) ** 0.5
+    # check if all points are inside or, at worst, on the ellipse
+    inEllipse = True
+    for p in points:
+      res = (a/s) * ((p[0] - mx) ** 2) + (b/s) * ((p[1] - my) ** 2)
 
-      # did we already find an ellipse? If no, this is the best candidate
-      # so far and we'll mark it down later.
-      # if yes, we check if the new ellipse is smaller than the old one
-      if bestArea > 0:
-        nbb = rx * ry
-        if nbb < bestArea:
-          bestArea = nbb
-          bestBounds = [mx, my, rx, ry]
-      else:
-        bestArea = rx * ry
-        bestBounds = [mx, my, rx, ry]
+      print ("[RES]")
+      print (res)
+      # if this happens, the point is outside the ellipse. Stop searching
+      # if res > 1:
+        # inEllipse = False
+        # break
+
+    if not inEllipse:
+      continue
+
+    
+
+    # did we already find an ellipse? If no, this is the best candidate
+    # so far and we'll mark it down later.
+    # if yes, we check if the new ellipse is smaller than the old one
+    if bestArea > 0:
+      nbb = rx * ry
+      if nbb < bestArea:
+        print("[[[ N E W   B E S T   S O L U T I O N]]]")
+        print ("mx, my, rx, ry")
+        print bestBounds
+        bestArea = nbb
+        bestBounds = [mx, my, rx*2, ry*2]
+    else:
+      bestArea = rx * ry
+      bestBounds = [mx, my, rx*2, ry*2]
+
+    
+    print ("::")
+    print ("mx, my, rx, ry")
+    print bestBounds
 
   return bestBounds
 
@@ -323,7 +429,7 @@ def getEllipseDimensions(rows):
   #      * as close as possible to the edge of the ellipse.
   #
   # That's a bit hard, though, so we'll have to do with an approximation.
-  # see: https://math.stackexchange.com/questions/207685/how-to-find-the-minimal-axis-parallel-ellipse-enclosing-a-set-of-points
+  # see: https://math.stackexchange.com/a/207837
   # and even this is cancer so ...
   #  
   # Quick reminder. Rows coords are like this: top, bottom, left, right 
@@ -336,16 +442,17 @@ def getEllipseDimensions(rows):
 
   edgePoints = []
 
-  # handle the top edges of the top half of the rows
+  # determine edge points and offset a tiny bit to ensure a solution exists
+  # when calculating ellipse dimensions
   for i in xrange(0, -(-rowCount // 2)):
-    edgePoints.append([float(rows[i][2]), float(rows[i][0])])
-    edgePoints.append([float(rows[i][3]), float(rows[i][0])])
+    edgePoints.append([float(rows[i][2]) - 0.5, float(rows[i][0]) - 0.5])
+    edgePoints.append([float(rows[i][3]) - 0.5, float(rows[i][0])])
 
   for i in xrange(rowCount // 2, rowCount):
-    edgePoints.append([float(rows[i][2]), float(rows[i][1])])
+    edgePoints.append([float(rows[i][2]), float(rows[i][1]) - 0.5])
     edgePoints.append([float(rows[i][3]), float(rows[i][1])])
 
-  return bounds = calculateEllipseBounds(edgePoints)
+  return calculateEllipseBounds(edgePoints)
   
 def drawEllipseBubble(image, rows, layer, bubble_layer, xpad, ypad):
   # making things more readable
@@ -358,8 +465,7 @@ def drawEllipseBubble(image, rows, layer, bubble_layer, xpad, ypad):
   #
   # returns [center_x, center_y, width, height] (note: center points are relative to
   # the layer)
-  #
-  #
+  
   dims = getEllipseDimensions(rows)
   
   toolOffset_x = dims[2] // 2
