@@ -452,22 +452,13 @@ def getEllipseDimensions(rows, xpad, ypad):
     #       | text corner
     #
 
-    # offset x, left then right
-    edgePoints.append([float(rows[i][2]) - 0.5 - float(xpad), float(rows[i][0]) - 0.5])
-    edgePoints.append([float(rows[i][3]) - 0.5 + float(xpad), float(rows[i][0])])
-
-    # offset y, left then right
-    edgePoints.append([float(rows[i][2]) - 0.5, float(rows[i][0]) - 0.5 - float(ypad)])
-    edgePoints.append([float(rows[i][3]) - 0.5, float(rows[i][0]) - float(ypad)])
+    edgePoints.append([float(rows[i][2]), float(rows[i][0])])
+    edgePoints.append([float(rows[i][3]), float(rows[i][0])])
 
   for i in xrange(rowCount // 2, rowCount):
     # offset x, left then right
-    edgePoints.append([float(rows[i][2]) - float(xpad), float(rows[i][1]) - 0.5])
-    edgePoints.append([float(rows[i][3]) + float(xpad), float(rows[i][1])])
-
-    # offset y, left then right
-    edgePoints.append([float(rows[i][2]), float(rows[i][1]) - 0.5 + float(ypad)])
-    edgePoints.append([float(rows[i][3]), float(rows[i][1]) + float(ypad)])
+    edgePoints.append([float(rows[i][2]), float(rows[i][1])])
+    edgePoints.append([float(rows[i][3]), float(rows[i][1])])
 
   return calculateEllipseBounds(edgePoints)
   
