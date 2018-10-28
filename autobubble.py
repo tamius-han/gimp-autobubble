@@ -419,7 +419,7 @@ def calculateEllipseBounds(points):
 
   return bestBounds
 
-def getEllipseDimensions(rows):
+def getEllipseDimensions(rows, xpad, ypad):
   # uh oh
   #
   # returns [x,y,width,height]
@@ -445,12 +445,29 @@ def getEllipseDimensions(rows):
   # determine edge points and offset a tiny bit to ensure a solution exists
   # when calculating ellipse dimensions
   for i in xrange(0, -(-rowCount // 2)):
-    edgePoints.append([float(rows[i][2]) - 0.5, float(rows[i][0]) - 0.5])
-    edgePoints.append([float(rows[i][3]) - 0.5, float(rows[i][0])])
+    # Instead of having one point per corner, we add extra points which take
+    # vertical and horizontal offset into account (a,b instead of x)
+    #       a    
+    #     b x-----
+    #       | text corner
+    #
+
+    # offset x, left then right
+    edgePoints.append([float(rows[i][2]) - 0.5 - float(xpad), float(rows[i][0]) - 0.5])
+    edgePoints.append([float(rows[i][3]) - 0.5 + float(xpad), float(rows[i][0])])
+
+    # offset y, left then right
+    edgePoints.append([float(rows[i][2]) - 0.5, float(rows[i][0]) - 0.5 - float(ypad)])
+    edgePoints.append([float(rows[i][3]) - 0.5, float(rows[i][0]) - float(ypad)])
 
   for i in xrange(rowCount // 2, rowCount):
-    edgePoints.append([float(rows[i][2]), float(rows[i][1]) - 0.5])
-    edgePoints.append([float(rows[i][3]), float(rows[i][1])])
+    # offset x, left then right
+    edgePoints.append([float(rows[i][2]) - float(xpad), float(rows[i][1]) - 0.5])
+    edgePoints.append([float(rows[i][3]) + float(xpad), float(rows[i][1])])
+
+    # offset y, left then right
+    edgePoints.append([float(rows[i][2]), float(rows[i][1]) - 0.5 + float(ypad)])
+    edgePoints.append([float(rows[i][3]), float(rows[i][1]) + float(ypad)])
 
   return calculateEllipseBounds(edgePoints)
   
@@ -466,7 +483,7 @@ def drawEllipseBubble(image, rows, layer, bubble_layer, xpad, ypad):
   # returns [center_x, center_y, width, height] (note: center points are relative to
   # the layer)
   
-  dims = getEllipseDimensions(rows)
+  dims = getEllipseDimensions(rows, xpad, ypad)
   
   toolOffset_x = dims[2] // 2
   toolOffset_y = dims[3] // 2
