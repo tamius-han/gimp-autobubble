@@ -260,14 +260,16 @@ def getSolutionVectorSpaceInverted(points):
     # for i in xrange(0, cols):
     #   matrix[row][i] /= pivot
 
-    # for all rows, do this
+    # for all rows, do this. Skip rows with comparatively small pivots,
+    # they're 0 for all practical intents and purposes
     for i in xrange(0, rows):
       if i == row:
         continue
       factor = matrix[i][col] / matrix[row][col]
       for j in xrange(0, cols): # for all elements in current row
-         # since points aren't terribly accurate, we round things close to two decimals
-        matrix[i][j] = matrix[i][j] - matrix[row][j] * factor
+        matrix[i][j] = round(matrix[i][j] - matrix[row][j] * factor, 5)
+    if abs(matrix[row][col]) < 0.25:
+      matrix[row][col] = 0.0      # since they're practically 0 ...
        
     
     row += 1
@@ -292,11 +294,16 @@ def calculateEllipseBounds(points):
     print("")
     print("<starting new loop>")
     matrix = getSolutionVectorSpaceInverted(combination)
+    # for i in xrange(3, 4): 
+    #   for j in xrange(0, 4):  # let's not round the last column
+    #     matrix[i][j] = round(matrix[i][j], 0)
+
 
     print ("-----------------")
     print ("new matrix with solution:")
     for row in matrix:
       print (row)
+
 
     # we're using abcd (and mx, my, s, rx, and ry) because mathexchange answer this
     # algorithm is based on used these letters. Using same letters makes following 
@@ -304,17 +311,7 @@ def calculateEllipseBounds(points):
     #    src: https://math.stackexchange.com/a/207837
     # 
     # we can spot whether our group of points has a solution just by looking at the 
-    # matrix. If we get something like this (where 'x' is non-zero number, and 1 is
-    # a pivot (but not neccesarily actually equals 1)):
-    #
-    #        [ 1 0 x 0 0 ]
-    #        [ 0 1 0 x 0 ]
-    #        [ 0 0 0 0 1 ]
-    #        [ 0 0 0 0 0 ]
-    #
-    # In case like this, we can only determine the center.
-    #
-    # If we get something like this, things start to look slightly more promising:
+    # matrix. If we get something like this, we can calculate everything:
     #   
     #     w:   [ 1 0 0 0 a ]
     #     x:   [ 0 1 0 0 b ]
@@ -335,30 +332,117 @@ def calculateEllipseBounds(points):
     # Of course, a question quickly arises. What is e? I don't know, but in practice
     # having 'e' set to -1 seems to work so far. 
 
+    # We can probably catch valid cases with first 4 comparrisons, but we'll add the
+    # rest just to be sure. We can also try to minimize conditions a bit (as first and
+    # second row must also be valid in some other scenarios)
+    a = 0.0; b = 0.0; c = 0.0; d = 0.0; e = 0.0; mx = 0.0; my = 0.0; s = 0.0
+    if matrix[0][1] == 0 and matrix[0][4] != 0 and matrix[1][1] != 0.0 and matrix[1][4] != 0.0:
+       
+      if matrix[2][2] != 0.0 and matrix[2][4] != 0.0 and matrix[3][3] != 0.0 and matrix[3][4] != 0.0:
+        print("Calculating ellipse is possible!")
+        a = (matrix[0][4]/matrix[0][0])
+        b = (matrix[1][4]/matrix[1][1])
+        c = (matrix[2][4]/matrix[2][2])
+        d = (matrix[3][4]/matrix[3][3])
+        e = -1.0
+
+        # that's the center of the ellipse
+        mx = - c / (2 * a)
+        my = - d / (2 * b)
+
+      # If we get something like this, we can only calculate 1 coordinate of the center. 
+      #   
+      #     w:   [ 1 0 0 0 a ]
+      #     x:   [ 0 1 0 0 b ]
+      #     y:   [ 0 0 ? ? c ]
+      #     z:   [ 0 0 0 0 ? ]
+      #
+      # In cases like this, we'll calculate the other coordinate by intersecting the line 
+      # we get with the longest diagonal we can find. 
+      # (NOTE: this can probably be optimized)
+      elif matrix[2][2] != 0 and matrix[2][4] != 0:
+        print("Calculating middle vertical point using alternative method")
+        a = (matrix[0][4]/matrix[0][0])
+        c = (matrix[2][4]/matrix[2][2])
+        e = -1.0
+
+        mx = - c / (2 * a)
+
+        # time to calculate my using a different approach
+        # split points into two groups: those left and those right of mx
+        left = []; right = []
+        for point in combination: 
+          if point[0] - mx < 0:
+            left.append(point)
+          else:
+            right.append(point)
+        
+        print("halves:")
+        print([left, right])
+        # calculate the longest distance from any point in left set to any point in right set
+        fromLeft = left[0]; fromRight = right[0]
+        bestDistance = ((fromLeft[0] - fromRight[0]) ** 2 ) + ((fromLeft[1] - fromRight[1]) ** 2)
+        for pl in left:
+          for pr in right:
+            distance = ((pl[0] - pr[0]) ** 2) + ((pl[1] - pr[1]) ** 2)
+            if distance > bestDistance:
+              bestDistance = distance
+              fromLeft = pl
+              fromRight = pr
+        
+        # see where the line between fromLeft and fromRight intersects mx
+        # slope = diffY / diffX
+        slope = (fromRight[1] / fromLeft[1]) / (fromRight[0] - fromLeft[0]) 
+        dx = (mx - fromLeft[0]) / (fromRight[0] - fromLeft[0]) 
+        dy = dx * slope
+
+        my = dy + fromLeft[1]
+        
+        # right, we got the other center. This means we can calculate 'd' by turning our previous
+        # equation around a bit:
+        # my = - d / (2 * b), and b is ... matrix[1][3]d + matrix[1][4]e
+        d = - (matrix[1][4] * e * my) / (matrix[1][3] * mx + 1)
+        b = d * matrix[1][3] + matrix[1][4] * e
+
+
+
+
+    # else:
+    #   if matrix[0][4] == 0 or matrix[1][4] == 0 or matrix[2][4] == 0 or matrix[3][4] == 0:
+    #     print("one of the values is null")
+    #     continue
+
+    # now we can extract variables much the same way we did before:
+    
+    # c = - matrix[0][0] / matrix[0][2]
+    # d = - matrix[1][1] / matrix[1][3]
+    
+
+    # If we get something like this (where 'x' is non-zero number, and 1 is
+    # a pivot (but not neccesarily actually equals 1)):
+    #
+    #        [ 1 0 x 0 0 ]
+    #        [ 0 1 0 x 0 ]
+    #        [ 0 0 0 0 1 ]
+    #        [ 0 0 0 0 0 ]
+    #
+    # In case like this, we can only determine the center.
     centerOnly = matrix[0][0] != 0 and matrix[0][1] == 0 and matrix[0][2] != 0 and matrix[0][3] == 0 and matrix[0][4] == 0 \
                  and matrix[1][1] != 0 and matrix[1][2] == 0 and matrix[1][3] != 0 or matrix[1][4] == 0 \
                  and matrix[2][2] == 0 and matrix[2][3] == 0 and matrix[2][4] != 0
 
     if centerOnly:
-      a = 1.0; b = 1.0; e = 0.0
-      c = matrix[0][0] / matrix[0][2]
-      d = matrix[0][0] / matrix[1][3]
+      print("not enough data to determine radius")
+      continue
+    #   a = 1.0; b = 1.0; e = 0.0
+    #   c = matrix[0][0] / matrix[0][2]
+    #   d = matrix[0][0] / matrix[1][3]
+    # TODO reject
 
-    else:
-      if matrix[0][4] == 0 or matrix[1][4] == 0 or matrix[2][4] == 0 or matrix[3][4] == 0:
-        print("one of the values is null")
-        continue
 
-      # now we can extract variables much the same way we did before:
-      a = (matrix[0][4]/matrix[0][0])
-      b = (matrix[1][4]/matrix[1][1])
-      c = (matrix[2][4]/matrix[2][2])
-      d = (matrix[3][4]/matrix[3][3])
-      e = -1
-      # c = - matrix[0][0] / matrix[0][2]
-      # d = - matrix[1][1] / matrix[1][3]
-    
-    
+
+   
+
     # we know we're looking at ellipse if:
     #   * a and b have the same sign (both negative or both positive)
     #   * neither a nor b is zero
@@ -368,13 +452,18 @@ def calculateEllipseBounds(points):
       print("a: {}, b: {}".format(a,b))
       continue
 
-    # that's the center of the ellipse
-    mx = - c / (2 * a)
-    my = - d / (2 * b)
 
+    # let's round the stuff a bit
+    # a = round(a, 4)
+    # b = round(b, 4)
+    c = round(c, 4)
+    d = round(d, 4)
     # s stands for ... something? idk
     s = (c ** 2) / (4 * a) + (d ** 2) / (4 * b) - e
 
+   
+    print("a, b, c, d, e, s:")
+    print([a,b,c,d,e, s])
 
     # so all the points are inside the ellipse. Let's find radius.
     rx = (s / a) ** 0.5
@@ -385,12 +474,12 @@ def calculateEllipseBounds(points):
     for p in points:
       res = (a/s) * ((p[0] - mx) ** 2) + (b/s) * ((p[1] - my) ** 2)
 
-      print ("[RES]")
-      print (res)
+      print ("[RES] : point/m")
+      print ([res, [(p[0], mx),(p[1], my)]])
       # if this happens, the point is outside the ellipse. Stop searching
-      # if res > 1:
-        # inEllipse = False
-        # break
+      if res > 1:
+        inEllipse = False
+        break
 
     if not inEllipse:
       continue
