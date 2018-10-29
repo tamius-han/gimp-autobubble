@@ -15,11 +15,17 @@ execfile('projects/gimp-autobubble/autobubble.py')
 image = gimp.image_list()[0]
 bubble_layer = image.active_layer
 
-
+# ellipse
 layer = image.active_layer
-
 rows = determineTextRows(layer)
 drawEllipseBubble(image, rows, layer, bubble_layer, 0, 0)
+
+
+# rectangle
+layer = image.active_layer
+rows = determineTextRows(layer)
+rows = correctRows(rows, 50)
+drawRectangularBubble(image, rows, layer, bubble_layer, 0, 0)
 
 -- reload --
 execfile('projects/gimp-autobubble/autobubble.py')
@@ -377,8 +383,18 @@ def calculateEllipseBounds(points):
           else:
             right.append(point)
         
+        
+
+        print("mx: {}".format(mx))
         print("halves:")
         print([left, right])
+
+        # i dont know how that happened, but it did at least once.
+        if len(left) == 0 or len(right) == 0:
+          print("uwu oopsie whoopsie. We've just had a fucky wucky. All points are on the same side of mx for some reason. Skipping this set.")
+          continue
+
+
         # calculate the longest distance from any point in left set to any point in right set
         fromLeft = left[0]; fromRight = right[0]
         bestDistance = ((fromLeft[0] - fromRight[0]) ** 2 ) + ((fromLeft[1] - fromRight[1]) ** 2)
@@ -481,10 +497,13 @@ def calculateEllipseBounds(points):
     d = round(d, 4)
     # s stands for ... something? idk
     s = (c ** 2) / (4 * a) + (d ** 2) / (4 * b) - e
-
    
     print("a, b, c, d, e, s:")
     print([a,b,c,d,e, s])
+
+    if s * a <= 0 or s * b <= 0:
+      print("sign mismatch (s, a, b need to have matching signs). Skipping point combination.")
+      continue
 
     # so all the points are inside the ellipse. Let's find radius.
     rx = (s / a) ** 0.5
