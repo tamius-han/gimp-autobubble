@@ -382,8 +382,16 @@ def calculateEllipseBounds(points):
         # calculate the longest distance from any point in left set to any point in right set
         fromLeft = left[0]; fromRight = right[0]
         bestDistance = ((fromLeft[0] - fromRight[0]) ** 2 ) + ((fromLeft[1] - fromRight[1]) ** 2)
+
+
         for pl in left:
+          bestVertDiff = 0.0
           for pr in right:
+            vdiff = abs(pl[1] - pr[1])
+            if vdiff < bestVertDiff:
+              continue
+            
+            bestVertDiff = vdiff
             distance = ((pl[0] - pr[0]) ** 2) + ((pl[1] - pr[1]) ** 2)
             if distance > bestDistance:
               bestDistance = distance
@@ -391,12 +399,25 @@ def calculateEllipseBounds(points):
               fromRight = pr
         
         # see where the line between fromLeft and fromRight intersects mx
+        top = min(fromRight[1], fromLeft[1])
+        bottom = max(fromRight[1], fromLeft[1])
+
+        textHeight = top - bottom
+        textWidth = fromRight[0] - fromLeft[0]
+
+        slopeDirection = 1
+        if top == fromRight[1]:
+          slopeDirection = -1
+
         # slope = diffY / diffX
-        slope = (fromRight[1] / fromLeft[1]) / (fromRight[0] - fromLeft[0]) 
-        dx = (mx - fromLeft[0]) / (fromRight[0] - fromLeft[0]) 
+        slope = textHeight / textWidth
+        dx = (mx - fromLeft[0]) / textWidth
         dy = dx * slope
 
-        my = dy + fromLeft[1]
+        if slopeDirection == 1:
+          my = top + dy
+        else:
+          my = bottom - dy
         
         # right, we got the other center. This means we can calculate 'd' by turning our previous
         # equation around a bit:
@@ -494,7 +515,7 @@ def calculateEllipseBounds(points):
       if nbb < bestArea:
         print("[[[ N E W   B E S T   S O L U T I O N]]]")
         print ("mx, my, rx, ry")
-        print bestBounds
+        print (bestBounds)
         bestArea = nbb
         bestBounds = [mx, my, rx*2, ry*2]
     else:
@@ -541,12 +562,12 @@ def getEllipseDimensions(rows, xpad, ypad):
     #       | text corner
     #
 
-    edgePoints.append([float(rows[i][2]), float(rows[i][0])])
-    edgePoints.append([float(rows[i][3]), float(rows[i][0])])
+    edgePoints.append([float(rows[i][2]) -0.5, float(rows[i][0]) - 0.5])
+    edgePoints.append([float(rows[i][3]) -0.5, float(rows[i][0])])
 
   for i in xrange(rowCount // 2, rowCount):
     # offset x, left then right
-    edgePoints.append([float(rows[i][2]), float(rows[i][1])])
+    edgePoints.append([float(rows[i][2]), float(rows[i][1]) - 0.5])
     edgePoints.append([float(rows[i][3]), float(rows[i][1])])
 
   return calculateEllipseBounds(edgePoints)
