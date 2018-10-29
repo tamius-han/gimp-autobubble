@@ -24,7 +24,7 @@ drawEllipseBubble(image, rows, layer, bubble_layer, 0, 0)
 # rectangle
 layer = image.active_layer
 rows = determineTextRows(layer)
-rows = correctRows(rows, 50)
+rows = correctRows(rows, 20)
 drawRectangularBubble(image, rows, layer, bubble_layer, 0, 0)
 
 -- reload --
@@ -205,24 +205,32 @@ def drawRectangularBubble(image, rows, layer, bubble_layer, xpad, ypad):
 
   # now we can start drawing rectangles
   for i in xrange(0, len(rows)):
-    select_x = offset_x + rows[i][2] - xpad
-    select_y = offset_y + rows[i][0] - ypad
+    select_x = rows[i][2] - xpad + offset_x
+    select_y = rows[i][0] - ypad + offset_y
     select_w = rows[i][3] - rows[i][2] + (2*xpad)
     select_h = rows[i][1] - rows[i][0] + (2*ypad)
 
     # image, operation (0 - add), x, y, w, h)
     pdb.gimp_image_select_rectangle(image, 0, select_x, select_y, select_w, select_h)
-    # drawable/layer, fill mode (1 - bg), x, y (anywhere goes cos selection)
+
     # ensure current row is connected with row on top (unless the gap between two rows is
     # bigger than our treshold)
     if i > 0 and rows[i][0] - rows[i-1][1] < connect_rows_treshold:
-      select_x = max(rows[i][2], rows[i-1][2])
-      select_w = min(rows[i][3], rows[i-1][3]) - select_x + (2*xpad)
-      select_x += offset_x - xpad
+      select_x =            max(rows[i][2], rows[i-1][2]) 
+      select_y =            rows[i-1][1] 
+      select_w = 2 * xpad + min(rows[i][3], rows[i-1][3]) - select_x
+      select_h = 2 * ypad + rows[i][0] - select_y
 
-      pdb.gimp_image_select_rectangle(image, 0, select_x, rows[i-1][1], select_w, rows[i][0])
-    
-    pdb.gimp_edit_bucket_fill_full(bubble_layer, 1, 28, 100, 0, 0, 1, 0, 1, 1)
+      # there's a reason this isn't included above
+      select_x += offset_x - xpad
+      select_y += offset_y - ypad
+
+      # image, operation (0 - add), x, y, w, h)
+      pdb.gimp_image_select_rectangle(image, 0, select_x, select_y, select_w, select_h)
+
+  # fill all at once
+  # drawable/layer, fill mode (1 - bg), x, y (anywhere goes cos selection)
+  pdb.gimp_edit_bucket_fill_full(bubble_layer, 1, 28, 100, 0, 0, 1, 0, 1, 1)
 
   # end
 
@@ -544,7 +552,7 @@ def calculateEllipseBounds(points):
     
     print ("::")
     print ("mx, my, rx, ry")
-    print bestBounds
+    print (bestBounds)
 
   return bestBounds
 
