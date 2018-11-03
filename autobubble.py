@@ -299,6 +299,51 @@ def getSolutionVectorSpaceInverted(points):
 
   return matrix
 
+def bruteforceEllipseBounds(points, pset, mx, my):
+  maxx = points[0][0]; maxy = points[0][1], minx = points[0][0], miny = points[0][1]
+
+  iterations = 20
+  stepRelative = 0.75
+
+  for p in range(1, len(points)):
+    if p[0] > maxx:
+      maxx = p[0]
+    if p[0] < minx:
+      minx = p[0]
+    if p[1] > maxy:
+      maxy = p[1]
+    if p[1] < miny:
+      miny = p[1]
+
+  ew = maxx - minx  # this is our initial radius, twice as long as width/height
+  eh = maxy - miny  # this also radius, but for other axis
+
+  stepx = ew * stepRelative
+  stepy = eh * stepRelative
+
+  while iterations > 0:
+    iterations -= 1
+
+    inEllipse = True
+    for point in pset:
+      res = (((point[0] - mx) ** 2) / (ew ** 2)) + (((point[1] - my) ** 2) / (eh ** 2))
+      if res > 1:
+        inEllipse = False
+
+
+    if inEllipse:
+      ew -= stepx
+      eh -= stepy
+    else:
+      ew += stepx
+      eh += stepy
+
+    stepx *= stepRelative
+    stepy *= stepRelative
+
+  # return best radius:
+  return [ew, eh]
+
 def calculateEllipseBounds(points):
   bestArea = -1
   bestBounds = [0, 0, -1, -1]
@@ -477,6 +522,13 @@ def calculateEllipseBounds(points):
                  and matrix[2][2] == 0 and matrix[2][3] == 0 and matrix[2][4] != 0
 
     if centerOnly:
+      # get center
+
+      mx = 1 / (2 * (matrix[0][0] / matrix[0][2]))
+      my = 1 / (2 * (matrix[1][1] / matrix[1][3]))
+
+      # bruteforce the rest
+
       print("not enough data to determine radius")
       continue
     #   a = 1.0; b = 1.0; e = 0.0
