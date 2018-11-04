@@ -230,7 +230,7 @@ def drawRectangularBubble(image, rows, layer, bubble_layer, xpad, ypad):
 
   # fill all at once
   # drawable/layer, fill mode (1 - bg), x, y (anywhere goes cos selection)
-  pdb.gimp_edit_bucket_fill_full(bubble_layer, 1, 28, 100, 0, 0, 1, 0, 1, 1)
+  pdb.gimp_edit_bucket_fill_full(bubble_layer, BUCKET_FILL_BG, LAYER_MODE_NORMAL, 100, 0, 0, 1, 0, 1, 1)
 
   # end
 
@@ -756,7 +756,7 @@ def drawEllipseBubble(image, rows, layer, bubble_layer, xpad, ypad):
   # image, operation (0 - add), x, y, w, h)
   pdb.gimp_image_select_ellipse(image, 0, select_x, select_y, select_w, select_h)
   # pdb.gimp_drawable_edit_bucket_fill(bubble_layer, 1, 1, 1)
-  pdb.gimp_edit_bucket_fill_full(bubble_layer, 1, 28, 100, 0, 0, 1, 0, 1, 1)
+  pdb.gimp_edit_bucket_fill_full(bubble_layer, BUCKET_FILL_BG, LAYER_MODE_NORMAL, 100, 0, 0, 1, 0, 1, 1)
 
 
  
