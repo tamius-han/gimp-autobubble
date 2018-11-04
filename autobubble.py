@@ -304,6 +304,8 @@ def bruteforceEllipseBounds(points, pset, mx, my):
 
   iterations = 20
   stepRelative = 0.75
+  stepRelative_arStage_outer = 0.99
+  stepRelative_arStage_inner = 0.98
 
   for p in range(1, len(points)):
     if p[0] > maxx:
@@ -321,6 +323,7 @@ def bruteforceEllipseBounds(points, pset, mx, my):
   stepx = ew * stepRelative
   stepy = eh * stepRelative
 
+  # step 1: find ellipse with same aspect ratio as text
   while iterations > 0:
     iterations -= 1
 
@@ -329,6 +332,7 @@ def bruteforceEllipseBounds(points, pset, mx, my):
       res = (((point[0] - mx) ** 2) / (ew ** 2)) + (((point[1] - my) ** 2) / (eh ** 2))
       if res > 1:
         inEllipse = False
+        break
 
 
     if inEllipse:
@@ -341,8 +345,72 @@ def bruteforceEllipseBounds(points, pset, mx, my):
     stepx *= stepRelative
     stepy *= stepRelative
 
+  # step 2: try to find a better radius by shrinking shorter radius 
+  # and stretching longer radius. The following values are maximum 
+  # possible values — if we find a solution that has greater area than
+  # the best current solution, we return best width and height without
+  # searching further as we aren't going to find a better solution
+  iterations = 20
+  innerSteps = 10
+
+  bestArea = ew * eh
+  bestw = ew
+  besth = eh
+
+  # true if ellipse is wider than taller, false otherwise
+  isLandscape = ew >= eh
+
+  stepx = ew * stepRelative_arStage_outer
+  stepy = eh * stepRelative_arStage_outer
+
+  if isLandscape:
+    stepInner = ew * stepRelative_arStage_inner
+  else:
+    stepInner = eh * stepRelative_arStage_inner
+  
+  for i in range(0, iterations):
+    # reduce shorter radius
+    if isLandscape:
+      eh -= stepy
+    else:
+      ew -= stepx
+
+    h = eh
+    w = ew
+
+    hasBeenInEllipse = False
+
+    for j in range(0, innerSteps):
+      # test if all points are in ellipse
+      inEllipse = True
+      for point in pset:
+        res = (((point[0] - mx) ** 2) / (w ** 2)) + (((point[1] - my) ** 2) / (h ** 2))
+        if res > 1:
+          inEllipse = False
+          break
+      
+      # expand the ellipse in the other dimension from where we narrowed it
+      if isLandscape:
+        w += stepInner
+      else:
+        h += stepInner
+      
+      if inEllipse:
+        hasBeenInEllipse = True
+        nbb = w * h
+        if nbb < bestArea:
+          bestArea = nbb
+          bestw = w
+          besth = h
+        else:
+          break   # we won't find a better solution this iteration
+    
+    if not hasBeenInEllipse:
+      break       # if this iteation has never been in an ellipse, subsequent
+                  # iterations won't be either
+  
   # return best radius:
-  return [ew, eh]
+  return [bestw, besth]
 
 def calculateEllipseBounds(points):
   bestArea = -1
@@ -528,17 +596,26 @@ def calculateEllipseBounds(points):
       my = 1 / (2 * (matrix[1][1] / matrix[1][3]))
 
       # bruteforce the rest
+      [rx, ry] = bruteforceEllipseBounds(points, pset, mx, my)
 
-      print("not enough data to determine radius")
+      # did we already find an ellipse? If no, this is the best candidate
+      # so far and we'll mark it down later.
+      # if yes, we check if the new ellipse is smaller than the old one
+      if bestArea > 0:
+        nbb = rx * ry
+        if nbb < bestArea:
+          print("[[[ N E W   B E S T   S O L U T I O N]]]")
+          print ("mx, my, rx, ry")
+          print (bestBounds)
+          bestArea = nbb
+          bestBounds = [mx, my, rx*2, ry*2]
+      else:
+        bestArea = rx * ry
+        bestBounds = [mx, my, rx*2, ry*2]
+
+      # we don't do the rest of the things in this case, becasue 
+      # we've achieved them differently
       continue
-    #   a = 1.0; b = 1.0; e = 0.0
-    #   c = matrix[0][0] / matrix[0][2]
-    #   d = matrix[0][0] / matrix[1][3]
-    # TODO reject
-
-
-
-   
 
     # we know we're looking at ellipse if:
     #   * a and b have the same sign (both negative or both positive)
