@@ -18,14 +18,14 @@ bubble_layer = image.active_layer
 # ellipse
 layer = image.active_layer
 rows = determineTextRows(layer)
-drawEllipseBubble(image, rows, layer, bubble_layer, 0, 0)
+drawEllipseBubble(image, rows, layer, bubble_layer, 7, 3)
 
 
 # rectangle
 layer = image.active_layer
 rows = determineTextRows(layer)
-rows = correctRows(rows, 20)
-drawRectangularBubble(image, rows, layer, bubble_layer, 0, 0)
+rows_correct = correctRows(rows, 40)
+drawRectangularBubble(image, rows_correct, layer, bubble_layer, 7, 3)
 
 -- reload --
 execfile('projects/gimp-autobubble/autobubble.py')
@@ -150,12 +150,15 @@ def findJag(edge1, edge2, minStepSize):
   #
   #   |<edge1
   #  |<edge2     - returns -1
-  if edge1 > edge2 - minStepSize and edge1 < edge2 + minStepSize:
+  if abs(edge1 - edge2) < minStepSize:
+    print("jag within limits")
     if edge1 > edge2:
+      print("jag = 1")
       return 1
     else: 
       return -1
   
+  print("jag is bigger than min step size")
   return 0
 
 def correctRows(rows, minStepSize):
@@ -163,7 +166,7 @@ def correctRows(rows, minStepSize):
     return rows #there's nothing to do if we only have one row
   
   # correct jags in the left edge
-  for i in xrange(0, len(rows) - 2):
+  for i in xrange(0, len(rows) - 1):
     jag = findJag(rows[i][2], rows[i+1][2], minStepSize)
     if jag == -1:
       rows[i+1][2] = rows[i][2]
@@ -177,7 +180,8 @@ def correctRows(rows, minStepSize):
           rows[j][2] = rows[i][2]
   
   # now correct the other edge, but mind that meanings of findJag() have flipped
-  for i in xrange(0, len(rows) - 2):
+  for i in xrange(0, len(rows) - 1):
+    print('..')
     jag = findJag(rows[i][3], rows[i+1][3], minStepSize)
     if jag == 1:
       rows[i+1][3] = rows[i][3]
@@ -300,14 +304,15 @@ def getSolutionVectorSpaceInverted(points):
   return matrix
 
 def bruteforceEllipseBounds(points, pset, mx, my):
-  maxx = points[0][0]; maxy = points[0][1], minx = points[0][0], miny = points[0][1]
+  print(points)
+  maxx = points[0][0]; maxy = points[0][1]; minx = points[0][0]; miny = points[0][1]
 
   iterations = 20
   stepRelative = 0.75
   stepRelative_arStage_outer = 0.99
   stepRelative_arStage_inner = 0.98
 
-  for p in range(1, len(points)):
+  for p in points:
     if p[0] > maxx:
       maxx = p[0]
     if p[0] < minx:
@@ -347,7 +352,7 @@ def bruteforceEllipseBounds(points, pset, mx, my):
 
   # step 2: try to find a better radius by shrinking shorter radius 
   # and stretching longer radius. The following values are maximum 
-  # possible values — if we find a solution that has greater area than
+  # possible values - if we find a solution that has greater area than
   # the best current solution, we return best width and height without
   # searching further as we aren't going to find a better solution
   iterations = 20
@@ -356,6 +361,10 @@ def bruteforceEllipseBounds(points, pset, mx, my):
   bestArea = ew * eh
   bestw = ew
   besth = eh
+
+  print("----- bruteforce -----")
+  print("inital area:")
+  print([bestArea, [mx, my], [bestw, besth]])
 
   # true if ellipse is wider than taller, false otherwise
   isLandscape = ew >= eh
@@ -402,6 +411,8 @@ def bruteforceEllipseBounds(points, pset, mx, my):
           bestArea = nbb
           bestw = w
           besth = h
+          print("bruteforce: found new solution (area, mx, my, rx, ry")
+          print([bestArea, [mx, my], [bestw, besth]])
         else:
           break   # we won't find a better solution this iteration
     
@@ -596,7 +607,7 @@ def calculateEllipseBounds(points):
       my = 1 / (2 * (matrix[1][1] / matrix[1][3]))
 
       # bruteforce the rest
-      [rx, ry] = bruteforceEllipseBounds(points, pset, mx, my)
+      [rx, ry] = bruteforceEllipseBounds(points, combination, mx, my)
 
       # did we already find an ellipse? If no, this is the best candidate
       # so far and we'll mark it down later.
@@ -622,9 +633,31 @@ def calculateEllipseBounds(points):
     #   * neither a nor b is zero
     # we skip those vectors
     if a * b <= 0:
-      print("sign mismatch")
+      print("sign mismatch. trying bruteforce")
       print("a: {}, b: {}".format(a,b))
+      
+      [rx, ry] = bruteforceEllipseBounds(points, combination, mx, my)
+
+      # did we already find an ellipse? If no, this is the best candidate
+      # so far and we'll mark it down later.
+      # if yes, we check if the new ellipse is smaller than the old one
+      if bestArea > 0:
+        nbb = rx * ry
+        if nbb < bestArea:
+          print("[[[ N E W   B E S T   S O L U T I O N]]]")
+          print ("mx, my, rx, ry")
+          print (bestBounds)
+          bestArea = nbb
+          bestBounds = [mx, my, rx*2, ry*2]
+      else:
+        bestArea = rx * ry
+        bestBounds = [mx, my, rx*2, ry*2]
+        print("BEST AREA:")
+        print([bestArea, [mx, my], [rx, ry]])
+      
+
       continue
+
 
 
     # let's round the stuff a bit
@@ -640,6 +673,22 @@ def calculateEllipseBounds(points):
 
     if s * a <= 0 or s * b <= 0:
       print("sign mismatch (s, a, b need to have matching signs). Skipping point combination.")
+      [rx, ry] = bruteforceEllipseBounds(points, combination, mx, my)
+
+      # did we already find an ellipse? If no, this is the best candidate
+      # so far and we'll mark it down later.
+      # if yes, we check if the new ellipse is smaller than the old one
+      if bestArea > 0:
+        nbb = rx * ry
+        if nbb < bestArea:
+          print("[[[ N E W   B E S T   S O L U T I O N]]]")
+          print ("mx, my, rx, ry")
+          print (bestBounds)
+          bestArea = nbb
+          bestBounds = [mx, my, rx*2, ry*2]
+      else:
+        bestArea = rx * ry
+        bestBounds = [mx, my, rx*2, ry*2]
       continue
 
     # so all the points are inside the ellipse. Let's find radius.
