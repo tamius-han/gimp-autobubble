@@ -13,22 +13,6 @@
 -- start --
 execfile('projects/gimp-autobubble/autobubble.py')
 image = gimp.image_list()[0]
-bubble_layer = image.active_layer
-
-# ellipse
-layer = image.active_layer
-rows = determineTextRows(layer)
-drawEllipseBubble(image, rows, layer, bubble_layer, 7, 3)
-
-
-# rectangle
-layer = image.active_layer
-rows = determineTextRows(layer)
-rows_correct = correctRows(rows, 40)
-drawRectangularBubble(image, rows_correct, layer, bubble_layer, 7, 3)
-
--- reload --
-execfile('projects/gimp-autobubble/autobubble.py')
 """
 
 import math
@@ -40,6 +24,21 @@ from gimpfu import *
 # in the layer stack. Google didn't yield anything useful, and text outliner
 # plugin confirmed inexistance of an object property that would just give me
 # the position of the layer. Ok then, let's roll our own.
+#
+#
+#  L A Y E R   M A N A G E M E N T
+#
+# todo: spin layer stuff into a separate file, because autobubble also uses 
+# this very same code. This means this and autobubble script may share certain
+# bugs as well
+
+# get the type we want for our layer
+def get_layer_type(image):
+  if image.base_type is RGB:
+    return RGBA_IMAGE
+  return GRAYA_IMAGE
+
+# finds layer position in a layer group
 def get_layer_stack_position(layer, group):
   iterator_pos = 0
 
@@ -56,7 +55,49 @@ def get_layer_stack_position(layer, group):
 
   return 0  # for some reason we didn't find proper position of layer in the stack     
 
-def add_layer_below_currently_selected(img):
+# add a new layer under given layer
+def add_layer_below(image, layer):
+  stack_pos = 0
+  
+  if layer.parent:
+    # parent is a group layer (= we're inside a group layer)
+    # this returns a tuple: (parent id, (<child ids>)). We want child ids.
+    sublayers = pdb.gimp_item_get_children(layer.parent)[1]
+    stack_pos = get_layer_stack_position(layer, sublayers)
+  else:
+    # parent is not a group layer (e.g. selected layer is on top level)
+    stack_pos = get_layer_stack_position(layer, image.layers)
+  
+  layer_out = gimp.Layer(image, "outline::{}".format(layer.name), image.width, image.height, get_layer_type(image), 100, NORMAL_MODE)
+  
+  # if img.active_layer.parent doesn't exist, it adds layer to top group. Otherwise 
+  # the layer will be added into current layer group
+  pdb.gimp_image_insert_layer(image, layer_out, layer.parent, stack_pos + 1)
+
+  return layer_out
+
+# adds layer at the bottom of a given group
+def add_layer_group_bottom(image, layer):
+  stack_pos = 0
+  
+  if type(layer) is gimp.GroupLayer:
+    # we want to give outline to a layer group. We add new layer at 
+    # at the bottom of the current group, so moving the group moves
+    # both group's original contents as well as the outline
+    stack_pos = len(pdb.gimp_item_get_children(layer)[1]) - 1
+
+  else:
+    # not a layer group, business as usual:
+    return add_layer_below(image, layer)
+  
+  layer_out = gimp.Layer(image, "outline::{}".format(layer.name), image.width, image.height, get_layer_type(image), 100, NORMAL_MODE)
+  # if img.active_layer.parent doesn't exist, it adds layer to top group. Otherwise 
+  # the layer will be added into current layer group
+  pdb.gimp_image_insert_layer(image, layer_out, layer, stack_pos + 1)
+
+  return layer_out
+
+
   stack_pos = 0
   
   if img.active_layer.parent:
@@ -74,6 +115,26 @@ def add_layer_below_currently_selected(img):
   pdb.gimp_image_insert_layer(img, bubble_layer, img.active_layer.parent, stack_pos + 1)
 
   return bubble_layer
+
+#
+#
+# misc helper functions:
+#
+def paint_selection_bg(layer):
+  pdb.gimp_edit_bucket_fill_full(layer, BUCKET_FILL_BG, LAYER_MODE_NORMAL, 100, 0, 0, 1, 0, 1, 1)
+
+def paint_selection_fg(layer):
+  pdb.gimp_edit_bucket_fill_full(layer, BUCKET_FILL_FG, LAYER_MODE_NORMAL, 100, 0, 0, 1, 0, 1, 1)
+
+def clear_selection(image):
+  pdb.gimp_image_select_rectangle(image, CHANNEL_OP_SUBTRACT, 0, 0, image.width,image.height)
+
+def grow_selection(image, thickness):
+  # Grow the selection
+	pdb.gimp_selection_grow(image, thickness)
+
+def feather_selection(image, feather):
+  pdb.gimp_selection_feather(image, feather)
 
 # FUNCTIONS FOR USE IN determineTextRows
 # Detects if row of pixels has any non-transparent items
@@ -193,7 +254,7 @@ def correctRows(rows, minStepSize):
   
   return rows
 
-def drawRectangularBubble(image, rows, layer, bubble_layer, xpad, ypad):
+def selectRectangle(image, layer, rows, xpad, ypad):
   # let's get offsets into more human-readable form
   offset_x = layer.offsets[0]
   offset_y = layer.offsets[1]
@@ -215,7 +276,7 @@ def drawRectangularBubble(image, rows, layer, bubble_layer, xpad, ypad):
     select_h = rows[i][1] - rows[i][0] + (2*ypad)
 
     # image, operation (0 - add), x, y, w, h)
-    pdb.gimp_image_select_rectangle(image, 0, select_x, select_y, select_w, select_h)
+    pdb.gimp_image_select_rectangle(image, CHANNEL_OP_ADD, select_x, select_y, select_w, select_h)
 
     # ensure current row is connected with row on top (unless the gap between two rows is
     # bigger than our treshold)
@@ -230,12 +291,7 @@ def drawRectangularBubble(image, rows, layer, bubble_layer, xpad, ypad):
       select_y += offset_y - ypad
 
       # image, operation (0 - add), x, y, w, h)
-      pdb.gimp_image_select_rectangle(image, 0, select_x, select_y, select_w, select_h)
-
-  # fill all at once
-  # drawable/layer, fill mode (1 - bg), x, y (anywhere goes cos selection)
-  pdb.gimp_edit_bucket_fill_full(bubble_layer, BUCKET_FILL_BG, LAYER_MODE_NORMAL, 100, 0, 0, 1, 0, 1, 1)
-
+      pdb.gimp_image_select_rectangle(image, CHANNEL_OP_ADD, select_x, select_y, select_w, select_h)
   # end
 
 def getSolutionVectorSpaceInverted(points):
@@ -777,7 +833,7 @@ def getEllipseDimensions(rows, xpad, ypad):
 
   return calculateEllipseBounds(edgePoints)
   
-def drawEllipseBubble(image, rows, layer, bubble_layer, xpad, ypad):
+def selectEllipse(image, layer, rows, xpad, ypad):
   # making things more readable
 
   offset_x = layer.offsets[0]
@@ -803,66 +859,177 @@ def drawEllipseBubble(image, rows, layer, bubble_layer, xpad, ypad):
 
 
   # image, operation (0 - add), x, y, w, h)
-  pdb.gimp_image_select_ellipse(image, 0, select_x, select_y, select_w, select_h)
-  # pdb.gimp_drawable_edit_bucket_fill(bubble_layer, 1, 1, 1)
-  pdb.gimp_edit_bucket_fill_full(bubble_layer, BUCKET_FILL_BG, LAYER_MODE_NORMAL, 100, 0, 0, 1, 0, 1, 1)
+  pdb.gimp_image_select_ellipse(image, CHANNEL_OP_ADD, select_x, select_y, select_w, select_h)
 
+def mkbubble (image, layer, isRound, minStepSize, xpad, ypad):
+  # NOTE: image parameter is needed by select functions later down the line.
+  # NOTE: this creates selection (and adds it to existing one). It doesn't
+  # actually fill the bubble, so I suppose the name is a bit misleading
 
- 
-def autobubble_layer(t_img, t_drawable, layer, bubble_layer, isRound, minStepSize, pad):
-  # args:
-  #     t_img
-  #     t_drawable
-  #     layer        - layer with text
-  #     bubble_layer - layer on which to draw speech bubble
-  #     isRound      - is buble an ellipse (True) or a rectangle (False)?
-  #     minStepSize  - on rectangular bubbles, avoid "steps" that are shorter
-  #                    than this many pixels long
+  # TODO: check for empty/non-text layers. If layer is devoid of text, do not
+  # select it. 100% transparent layers can hang the program and garbage input
+  # _will_ produce garbage result. Pro tip: non-text input is garbage input.
 
-  # determine where bounds of every text row layer are
-  text_rows = determineTextRows(layer)
+  textRows = determineTextRows(layer)
 
-  # if the bubble isn't round (i.e. we're drawing a rectangle), we try to 
-  # prevent some jaggedness. 
-  if not isRound:
-    text_rows = correctRows(text_rows, minStepSize)
-    drawRectangularBubble(t_img, text_rows, layer, bubble_layer, 3, 3)
+  if isRound:
+    selectEllipse(image, layer, textRows, xpad, ypad)
+  else:
+    textRows = correctRows(textRows, minStepSize)
+    selectRectangle(image, layer, textRows, xpad, ypad)
 
+def mkoutline (image, thickness, feather):
+  if thickness > 0:
+    grow_selection(image, thickness)
+  if feather > 0:
+    feather_selection(image, feather)
 
-
-def autobubble_group(t_img, t_drawable, bubble_layer, isRound): 
-  # get children of currently active layer
+def autobubble_group( image, layer_group, isRound, minStepSize = 25, xpad = 7, ypad = 3, separate_groups = True, separate_layers = False, merge_source = False, outline = False, outline_thickness = 3, outline_feather = 0, merge_outline = False ):
+  # TODO: optionally set parameters from layer full name
+  # NOTE: parameter from layer full name override function call
+  
+  
+  # get children of currently active layer group
   # returns [group layer id, [array with sublayer ids]]
   # if we do dis, we only get array with sublayer ids
-  sublayers = pdb.gimp_item_get_children(t_img.active_layer)[1]
+  sublayers = pdb.gimp_item_get_children(layer_group)[1]
 
-  for layer_id in sublayers:
-    layer = gimp.Item.from_id(layer_id)
-    if type(layer) is gimp.GroupLayer:       # btw yes, we DO do recursion
-      autobubble_group(t_img, t_drawable, bubble_layer, isRound)
-    else:
-      autobubble_layer(t_img, t_drawable, layer, bubble_layer, isRound)
-    
+  if separate_groups:
+    group_layers = []
+
+    for layerId in sublayers:
+      layer = gimp.Item.from_id(layerId)
+
+      # we ignore hidden layers
+      if not layer.visible:
+        continue
+      
+      # we hide layer gropups and put them on a "handle me later pls" list
+      if type(layer) is gimp.GroupLayer:
+        group_layers.append(layer)
+        layer.visible = False
+        continue
+      
+      # process all non-group layers
+      mkbubble(image, layer, isRound, minStepSize, xpad, ypad)
+
+    # we've created bubbles for all layers. Now fill the bubble
+    group_bubble_layer = add_layer_group_bottom(image, layer_group)
+    paint_selection_fg(group_bubble_layer)
+
+    # if bubbles have an outline
+    if outline:
+      group_bubble_outline_layer = add_layer_below(image, group_bubble_layer)
+      mkoutline(image, outline_thickness, outline_feather)
+      paint_selection_bg(group_bubble_outline_layer)
+
+      if merge_outline:
+        name = group_bubble_layer.name
+        mergedLayer = pdb.gimp_image_merge_down(image, group_bubble_layer, EXPAND_AS_NECESSARY)
+        mergedLayer.name = name
+      
+    clear_selection(image)
+
+    # now it's recursion o'clock:
+    # (and yes, we do recursion)
+    for layer in group_layers:
+      layer.visible = True
+      autobubble_group(image, layer, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline)
+
+  else:
+    # making bubbles on one layer group total has lots of things in common
+    # with creating bubbles on separate layers for every speech bubble
+    for layerId in sublayers:
+      layer = gimp.Item.from_id(layerId)
+      
+      # we ignore hidden layers
+      if not layer.visible:
+        continue
+      
+      # we hide layer gropups and put them on a "handle me later pls" list
+      if type(layer) is gimp.GroupLayer:
+        group_layers.append(layer)
+        autobubble_group(image, layer, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline)
+        continue
+      
+      # process all non-group layers
+      mkbubble(image, layer, isRound, minStepSize, xpad, ypad)
+
+      # if we separate layers, we do that here. Otherwise, we do that after
+      # calling this function.
+      if separate_layers:
+        bubble_layer = add_layer_below(image, layer)
+        paint_selection_fg(bubble_layer)
+
+        # if bubbles have an outline
+        if outline:
+          bubble_outline_layer = add_layer_below(image, bubble_layer)
+          mkoutline(image, outline_thickness, outline_feather)
+          paint_selection_bg(bubble_outline_layer)
+
+          if merge_outline:
+            name = group_bubble_layer.name
+            mergedLayer = pdb.gimp_image_merge_down(image, group_bubble_layer, EXPAND_AS_NECESSARY)
+            mergedLayer.name = name
+        
+        # merge source is a valid strat here
+        if merge_source:
+          name = layer.name         # save name of original layer
+          merged_layer = pdb.gimp_image_merge_down(image, layer, EXPAND_AS_NECESSARY)
+          merged_layer.name = name  # restore name of original layer
+
+        clear_selection(image)
+  
 
 
 # main function
-def python_autobubble(t_img, t_drawable, isRound=True):
+def python_autobubble(image, layer, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline):
   # save background
   bg_save = gimp.get_background()
+  fg_save = gimp.get_foreground()
 
-  # Bubbles will be drawn on their separate layer, which will be placed under
-  # current layer
-  bubble_layer = add_layer_below_currently_selected(t_img)
+  clear_selection(image)
 
-  # If activeLayer is a layer group, we run this script recursively for all
-  # all layers in a group. 
-  if type(t_img.active_layer) is gimp.GroupLayer:
-    autobubble_group(t_img, t_drawable, bubble_layer, isRound)
+  isGroupLayer = type(layer) is gimp.GroupLayer
+  # treat group layers differently
+  if isGroupLayer:
+    autobubble_group(image, layer, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline)
   else:
-    autobubble_layer(t_img, t_drawable, t_img.active_layer, bubble_layer, isRound)
+    mkbubble(image, layer, isRound, minStepSize, xpad, ypad)
+
+  # remember the 'we do that after calling the function' bit from earlier?
+  # this is where it gets done
+  if not isGroupLayer or not (separate_groups or separate_layers):
+    bubble_layer = add_layer_below(image, layer)
+    paint_selection_fg(bubble_layer)
+
+    # if bubbles have an outline
+    if outline:
+      bubble_outline_layer = add_layer_below(image, layer)
+      mkoutline(image, outline_thickness, outline_feather)
+      paint_selection_bg(bubble_outline_layer)
+
+      if merge_outline:
+        name = bubble_layer.name
+        mergedLayer = pdb.gimp_image_merge_down(image, bubble_layer, EXPAND_AS_NECESSARY)
+        mergedLayer.name = name
+    
+    # merge source is a valid strat here
+    if merge_source:
+      name = layer.name         # save name of original layer
+      merged_layer = pdb.gimp_image_merge_down(image, layer, EXPAND_AS_NECESSARY)
+      merged_layer.name = name  # restore name of original layer
+
+  # clear selection because we're nice
+  clear_selection(image)
 
   # at last, restore background
   gimp.set_background(bg_save)
+  gimp.set_foreground(fg_save)
+
+def python_test(image, isRound, minStepSize, xpad, ypad, isOutline):
+  python_autobubble(image, image.active_layer, isRound, minStepSize, xpad, ypad, True, False, False, isOutline, 3, 0, True)
+
 
 
 # register plugin.
