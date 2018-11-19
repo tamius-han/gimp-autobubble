@@ -118,6 +118,23 @@ def add_layer_group_bottom(image, layer):
 
 #
 #
+#  A U T O - A R G U M E N T     P A R S E R
+#
+# yes, we'll parse arguments from layers. 
+
+def parse_args_from_layer_name(name):
+  argLine = name.split('::auto-outline')[1].split('::')[0]
+  argsIn = argLine.split(' ')
+
+  argsOut = []
+
+  for arg in argsIn:
+    argsOut.append(arg.split('='))
+
+  return argsOut
+
+#
+#
 # misc helper functions:
 #
 def paint_selection_bg(layer):
