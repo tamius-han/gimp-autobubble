@@ -123,7 +123,7 @@ def add_layer_group_bottom(image, layer):
 # yes, we'll parse arguments from layers. 
 
 def parse_args_from_layer_name(name):
-  argLine = name.split('::auto-outline')[1].split('::')[0]
+  argLine = name.split('::autobubble')[1].split('::')[0]
   argsIn = argLine.split(' ')
 
   argsOut = []
@@ -937,8 +937,8 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
       elif arg[0] == 'outline':
         tmpo = arg[1].split(',')
         outline_thickness = tmpo[0]
-        if len(tmpo > 1):
-          outline_feather = tmpo[2]
+        if len(tmpo) > 1:
+          outline_feather = tmpo[1]
       elif arg[0] == 'merge_outline':
         merge_outline = True
       elif arg[0] == 'no_merge_outline':
@@ -1035,7 +1035,7 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
 
 
 # main function
-def python_autobubble(image, layer, auto, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline):
+def python_autobubble(image, layer, auto = True, isRound = True, minStepSize = 25, xpad = 7, ypad = 3, separate_groups = True, separate_layers = False, merge_source = False, outline = False, outline_thickness = 3, outline_feather = 0, merge_outline = False ):
   # save background
   bg_save = gimp.get_background()
   fg_save = gimp.get_foreground()
@@ -1081,6 +1081,10 @@ def python_autobubble(image, layer, auto, isRound, minStepSize, xpad, ypad, sepa
 
 def python_test(image, isRound, minStepSize, xpad, ypad, isOutline):
   python_autobubble(image, image.active_layer, isRound, minStepSize, xpad, ypad, True, False, False, isOutline, 3, 0, True)
+
+def python_test_auto():
+  img = gimp.image_list()[0]
+  python_autobubble(img, img.active_layer, True)
 
 
 # register plugin.
