@@ -901,7 +901,7 @@ def mkoutline (image, thickness, feather):
   if feather > 0:
     feather_selection(image, feather)
 
-def autobubble_group( image, layer_group, isRound, minStepSize = 25, xpad = 7, ypad = 3, separate_groups = True, separate_layers = False, merge_source = False, outline = False, outline_thickness = 3, outline_feather = 0, merge_outline = False ):
+def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSize = 25, xpad = 7, ypad = 3, separate_groups = True, separate_layers = False, merge_source = False, outline = False, outline_thickness = 3, outline_feather = 0, merge_outline = False ):
   # TODO: optionally set parameters from layer full name
   # NOTE: parameter from layer full name override function call
   
@@ -910,6 +910,41 @@ def autobubble_group( image, layer_group, isRound, minStepSize = 25, xpad = 7, y
   # returns [group layer id, [array with sublayer ids]]
   # if we do dis, we only get array with sublayer ids
   sublayers = pdb.gimp_item_get_children(layer_group)[1]
+
+  if auto:
+    arguments = parse_args_from_layer_name(layer_group.name)
+    for arg in arguments:
+      if arg[0] == 'ellipse':
+        isRound = True
+      elif arg[0] == 'rectangle':
+        isRound = False
+      elif arg[0] == 'min_step':
+        minStepSize = int(arg[1])
+      elif arg[0] == 'xpad':
+        xpad = int(arg[1])
+      elif arg[0] == 'ypad':
+        ypad = int(arg[1])
+      elif arg[0] == 'separate_groups':
+        separate_groups = True
+        separate_layers = False
+      elif arg[0] == 'separate_layers':
+        separate_groups = False
+        separate_layers = True
+      elif arg[0] == 'merge_source':
+        merge_source = True
+      elif arg[0] == 'no_merge_source':
+        merge_source = False
+      elif arg[0] == 'outline':
+        tmpo = arg[1].split(',')
+        outline_thickness = tmpo[0]
+        if len(tmpo > 1):
+          outline_feather = tmpo[2]
+      elif arg[0] == 'merge_outline':
+        merge_outline = True
+      elif arg[0] == 'no_merge_outline':
+        merge_outline = False
+      elif arg[0] == 'no_auto':
+        auto = False
 
   if separate_groups:
     group_layers = []
@@ -951,7 +986,7 @@ def autobubble_group( image, layer_group, isRound, minStepSize = 25, xpad = 7, y
     # (and yes, we do recursion)
     for layer in group_layers:
       layer.visible = True
-      autobubble_group(image, layer, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline)
+      autobubble_group(image, layer, auto, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline)
 
   else:
     # making bubbles on one layer group total has lots of things in common
@@ -1000,7 +1035,7 @@ def autobubble_group( image, layer_group, isRound, minStepSize = 25, xpad = 7, y
 
 
 # main function
-def python_autobubble(image, layer, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline):
+def python_autobubble(image, layer, auto, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline):
   # save background
   bg_save = gimp.get_background()
   fg_save = gimp.get_foreground()
@@ -1010,7 +1045,7 @@ def python_autobubble(image, layer, isRound, minStepSize, xpad, ypad, separate_g
   isGroupLayer = type(layer) is gimp.GroupLayer
   # treat group layers differently
   if isGroupLayer:
-    autobubble_group(image, layer, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline)
+    autobubble_group(image, layer, auto, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline)
   else:
     mkbubble(image, layer, isRound, minStepSize, xpad, ypad)
 
@@ -1046,7 +1081,6 @@ def python_autobubble(image, layer, isRound, minStepSize, xpad, ypad, separate_g
 
 def python_test(image, isRound, minStepSize, xpad, ypad, isOutline):
   python_autobubble(image, image.active_layer, isRound, minStepSize, xpad, ypad, True, False, False, isOutline, 3, 0, True)
-
 
 
 # register plugin.
