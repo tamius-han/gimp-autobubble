@@ -229,14 +229,13 @@ def findJag(edge1, edge2, minStepSize):
   #   |<edge1
   #  |<edge2     - returns -1
   if abs(edge1 - edge2) < minStepSize:
-    print("jag within limits")
     if edge1 > edge2:
-      print("jag = 1")
+      # print("jag = 1")
       return 1
     else: 
       return -1
   
-  print("jag is bigger than min step size")
+  # print("jag is bigger than min step size")
   return 0
 
 def correctRows(rows, minStepSize):
@@ -259,7 +258,7 @@ def correctRows(rows, minStepSize):
   
   # now correct the other edge, but mind that meanings of findJag() have flipped
   for i in xrange(0, len(rows) - 1):
-    print('..')
+    # print('..')
     jag = findJag(rows[i][3], rows[i+1][3], minStepSize)
     if jag == 1:
       rows[i+1][3] = rows[i][3]
@@ -935,6 +934,7 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
       elif arg[0] == 'no_merge_source':
         merge_source = False
       elif arg[0] == 'outline':
+        outline = True,
         tmpo = arg[1].split(',')
         outline_thickness = tmpo[0]
         if len(tmpo) > 1:
