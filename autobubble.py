@@ -133,6 +133,40 @@ def parse_args_from_layer_name(name):
 
   return argsOut
 
+
+#
+#
+#  C O L O R    S T A C K
+#
+
+__saved_colors_bg = []
+__saved_colors_fg = []
+def color_push_bg(color):
+  __saved_colors_bg.append(color)
+
+def color_pop_bg():
+  return __saved_colors.pop()
+
+def color_push_fg(color):
+  __saved_colors_fg.append(color)
+
+def color_pop_fg():
+  return __saved_colors_fg.pop()
+
+def set_bg_stack(newColor):
+  color_push(gimp.get_background())
+  gimp.set_background(color)
+
+def restore_bg_stack():
+  gimp.set_background(color_pop_bg())
+
+def set_fg_stack(newColor):
+  color_push_fg(gimp.get_foreground())
+  gimp.set_foreground(color)
+
+def restore_fg_stack():
+  gimp.set_foreground(color_pop_fg())
+
 #
 #
 # misc helper functions:
@@ -909,6 +943,9 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
   # returns [group layer id, [array with sublayer ids]]
   # if we do dis, we only get array with sublayer ids
   sublayers = pdb.gimp_item_get_children(layer_group)[1]
+  
+  fgcolor = ''
+  bgcolor = ''
 
   if auto:
     arguments = parse_args_from_layer_name(layer_group.name)
@@ -945,6 +982,16 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
         merge_outline = False
       elif arg[0] == 'no_auto':
         auto = False
+      elif arg[0] == 'color':
+        fgcolor = arg[1]
+      elif arg[0] == 'outline_color':
+        bgcolor = arg[1]
+
+  if fgcolor:
+    set_fg_stack(fgcolor)
+
+  if bgcolor:
+    set_bg_stack(bgcolor)
 
   if separate_groups:
     group_layers = []
@@ -1031,7 +1078,12 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
           merged_layer.name = name  # restore name of original layer
 
         clear_selection(image)
-  
+
+  if fgcolor:
+    restore_fg_stack()
+
+  if bgcolor:
+    restore_bg_stack()  
 
 
 # main function
