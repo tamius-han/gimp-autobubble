@@ -409,11 +409,75 @@ def getSolutionVectorSpaceInverted(points):
 
   return matrix
 
+def sortPointsByComponent(points, component):
+  # this is criminally bad, but we don't care because it's only 4 points
+  # you can karmawhore this on /r/badcode, I don't care
+  sortedPoints = []
+
+  for p in points:
+    if len(sortedPoints) == 0:
+      sortedPoints.append(p)
+      continue
+
+    append = True
+    for i in range(0, len(sortedPoints)):
+      if sortedPoints[i][component] > p[component]:
+        sortedPoints.insert(i, p)
+        append = False
+        break
+
+    if append:
+      sortedPoints.append(p)
+  
+  return sortedPoints
+
+def getEllipseCenterForPoints(points):
+  # find center
+  middle_x = (points[0][0] + points[1][0] + points[2][0] + points[3][0]) / 4
+  middle_y = (points[0][1] + points[1][1] + points[2][1] + points[3][1]) / 4
+  #
+  # find opposing vertices
+  leftFirst = sortPointsByComponent(points, 0)
+  #     * one of the first left points must be nw, the other sw
+  #     * note that this only works because leftmost two points
+  #       cant share 'y' coordinate due to how we calculate edge points
+  leftFirst
+  if leftFirst[0][1] > leftFirst[1][1]:
+    nw = leftFirst[0]
+    sw = leftFirst[1]
+  else:
+    nw = leftFirst[1]
+    sw = leftFirst[0]
+  
+  if leftFirst[2][1] > leftFirst[3][1]:
+    ne = leftFirst[2]
+    se = leftFirst[3]
+  else:
+    ne = leftFirst[3]
+    se = leftFirst[2]
+  #
+  # find where they intersect
+  nwse_slope = (se[1] - nw[1]) / (se[0] - nw[0])
+  swne_slope = (ne[1] - sw[1]) / (ne[0] - sw[0])
+  #
+  nwse_extra = se[1] - nwse_slope * se[0]
+  swne_extra = ne[1] - swne_slope * ne[0]
+  #
+  x = (swne_extra - nwse_extra) / (nwse_slope - swne_slope)
+  y = (nwse_slope * x) + nwse_extra
+  #
+  # mirror that over the center point from earlier
+  mx = middle_x + (middle_x - x)
+  my = middle_y + (middle_y - y)
+  #
+  # return value
+  return [mx, my]
+
 def bruteforceEllipseBounds(points, pset, mx, my):
   print(points)
   maxx = points[0][0]; maxy = points[0][1]; minx = points[0][0]; miny = points[0][1]
 
-  iterations = 20
+  iterations = 50
   stepRelative = 0.75
   stepRelative_arStage_outer = 0.99
   stepRelative_arStage_inner = 0.98
@@ -461,8 +525,8 @@ def bruteforceEllipseBounds(points, pset, mx, my):
   # possible values - if we find a solution that has greater area than
   # the best current solution, we return best width and height without
   # searching further as we aren't going to find a better solution
-  iterations = 20
-  innerSteps = 10
+  iterations = 40
+  innerSteps = 20
 
   bestArea = ew * eh
   bestw = ew
@@ -738,6 +802,7 @@ def calculateEllipseBounds(points):
     #   * a and b have the same sign (both negative or both positive)
     #   * neither a nor b is zero
     # we skip those vectors
+    
     if a * b <= 0:
       print("sign mismatch. trying bruteforce")
       print("a: {}, b: {}".format(a,b))
@@ -873,12 +938,12 @@ def getEllipseDimensions(rows, xpad, ypad):
     #       | text corner
     #
 
-    edgePoints.append([float(rows[i][2]) -0.5, float(rows[i][0]) - 0.5])
-    edgePoints.append([float(rows[i][3]) -0.5, float(rows[i][0])])
+    edgePoints.append([float(rows[i][2]), float(rows[i][0])])
+    edgePoints.append([float(rows[i][3]), float(rows[i][0])])
 
   for i in xrange(rowCount // 2, rowCount):
     # offset x, left then right
-    edgePoints.append([float(rows[i][2]), float(rows[i][1]) - 0.5])
+    edgePoints.append([float(rows[i][2]), float(rows[i][1])])
     edgePoints.append([float(rows[i][3]), float(rows[i][1])])
 
   return calculateEllipseBounds(edgePoints)
