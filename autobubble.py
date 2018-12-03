@@ -145,7 +145,7 @@ def color_push_bg(color):
   __saved_colors_bg.append(color)
 
 def color_pop_bg():
-  return __saved_colors.pop()
+  return __saved_colors_bg.pop()
 
 def color_push_fg(color):
   __saved_colors_fg.append(color)
@@ -154,15 +154,15 @@ def color_pop_fg():
   return __saved_colors_fg.pop()
 
 def set_bg_stack(newColor):
-  color_push(gimp.get_background())
-  gimp.set_background(color)
+  color_push_bg(gimp.get_background())
+  gimp.set_background(newColor)
 
 def restore_bg_stack():
   gimp.set_background(color_pop_bg())
 
 def set_fg_stack(newColor):
   color_push_fg(gimp.get_foreground())
-  gimp.set_foreground(color)
+  gimp.set_foreground(newColor)
 
 def restore_fg_stack():
   gimp.set_foreground(color_pop_fg())
@@ -473,16 +473,15 @@ def getEllipseCenterForPoints(points):
   # return value
   return [mx, my]
 
-def bruteforceEllipseBounds(points, pset, mx, my):
-  print(points)
-  maxx = points[0][0]; maxy = points[0][1]; minx = points[0][0]; miny = points[0][1]
+def bruteforceEllipseBounds(all_points, combination, mx, my):
+  maxx = combination[0][0]; maxy = combination[0][1]; minx = combination[0][0]; miny = combination[0][1]
 
   iterations = 50
   stepRelative = 0.75
   stepRelative_arStage_outer = 0.99
   stepRelative_arStage_inner = 0.98
 
-  for p in points:
+  for p in combination:
     if p[0] > maxx:
       maxx = p[0]
     if p[0] < minx:
@@ -503,7 +502,7 @@ def bruteforceEllipseBounds(points, pset, mx, my):
     iterations -= 1
 
     inEllipse = True
-    for point in pset:
+    for point in all_points:
       res = (((point[0] - mx) ** 2) / (ew ** 2)) + (((point[1] - my) ** 2) / (eh ** 2))
       if res > 1:
         inEllipse = False
@@ -562,7 +561,7 @@ def bruteforceEllipseBounds(points, pset, mx, my):
     for j in range(0, innerSteps):
       # test if all points are in ellipse
       inEllipse = True
-      for point in pset:
+      for point in all_points:
         res = (((point[0] - mx) ** 2) / (w ** 2)) + (((point[1] - my) ** 2) / (h ** 2))
         if res > 1:
           inEllipse = False
@@ -593,9 +592,46 @@ def bruteforceEllipseBounds(points, pset, mx, my):
   # return best radius:
   return [bestw, besth]
 
+
+def calculateEllipseBounds_bruteforce(points):
+  bestArea = -1
+  bestBounds = [0, 0, 0, 0]
+
+  for combination in itertools.combinations(points, 4):
+    print("")
+    print("")
+    print("<starting new loop>")
+
+    [mx, my] = getEllipseCenterForPoints(combination)
+    [rx, ry] = bruteforceEllipseBounds(points, combination, mx, my)
+
+    # did we already find an ellipse? If no, this is the best candidate
+    # so far and we'll mark it down later.
+    # if yes, we check if the new ellipse is smaller than the old one
+    if bestArea > 0:
+      nbb = rx * ry
+      if nbb < bestArea:
+        print("[[[ N E W   B E S T   S O L U T I O N]]]")
+        print ("mx, my, rx, ry")
+        print (bestBounds)
+        bestArea = nbb
+        bestBounds = [mx, my, rx*2, ry*2]
+    else:
+      bestArea = rx * ry
+      bestBounds = [mx, my, rx*2, ry*2]
+      print("BEST AREA:")
+      print([bestArea, [mx, my], [rx, ry]])
+      
+    
+  print ("::")
+  print ("mx, my, rx, ry")
+  print (bestBounds)
+
+  return bestBounds
+
 def calculateEllipseBounds(points):
   bestArea = -1
-  bestBounds = [0, 0, -1, -1]
+  bestBounds = [0, 0, 0, 0]
 
   for combination in itertools.combinations(points, 4):
     print("")
@@ -644,6 +680,8 @@ def calculateEllipseBounds(points):
     # rest just to be sure. We can also try to minimize conditions a bit (as first and
     # second row must also be valid in some other scenarios)
     a = 0.0; b = 0.0; c = 0.0; d = 0.0; e = 0.0; mx = 0.0; my = 0.0; s = 0.0
+
+
     if matrix[0][1] == 0 and matrix[0][4] != 0 and matrix[1][1] != 0.0 and matrix[1][4] != 0.0:
        
       if matrix[2][2] != 0.0 and matrix[2][4] != 0.0 and matrix[3][3] != 0.0 and matrix[3][4] != 0.0:
@@ -807,6 +845,7 @@ def calculateEllipseBounds(points):
       print("sign mismatch. trying bruteforce")
       print("a: {}, b: {}".format(a,b))
       
+      [mx, my] = getEllipseCenterForPoints(combination)
       [rx, ry] = bruteforceEllipseBounds(points, combination, mx, my)
 
       # did we already find an ellipse? If no, this is the best candidate
@@ -844,6 +883,7 @@ def calculateEllipseBounds(points):
 
     if s * a <= 0 or s * b <= 0:
       print("sign mismatch (s, a, b need to have matching signs). Skipping point combination.")
+      [mx, my] = getEllipseCenterForPoints(combination)
       [rx, ry] = bruteforceEllipseBounds(points, combination, mx, my)
 
       # did we already find an ellipse? If no, this is the best candidate
@@ -946,7 +986,7 @@ def getEllipseDimensions(rows, xpad, ypad):
     edgePoints.append([float(rows[i][2]), float(rows[i][1])])
     edgePoints.append([float(rows[i][3]), float(rows[i][1])])
 
-  return calculateEllipseBounds(edgePoints)
+  return calculateEllipseBounds_bruteforce(edgePoints)
   
 def selectEllipse(image, layer, rows, xpad, ypad):
   # making things more readable
@@ -1013,44 +1053,58 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
   bgcolor = ''
 
   if auto:
-    arguments = parse_args_from_layer_name(layer_group.name)
-    for arg in arguments:
-      if arg[0] == 'ellipse':
-        isRound = True
-      elif arg[0] == 'rectangle':
-        isRound = False
-      elif arg[0] == 'min_step':
-        minStepSize = int(arg[1])
-      elif arg[0] == 'xpad':
-        xpad = int(arg[1])
-      elif arg[0] == 'ypad':
-        ypad = int(arg[1])
-      elif arg[0] == 'separate_groups':
-        separate_groups = True
-        separate_layers = False
-      elif arg[0] == 'separate_layers':
-        separate_groups = False
-        separate_layers = True
-      elif arg[0] == 'merge_source':
-        merge_source = True
-      elif arg[0] == 'no_merge_source':
-        merge_source = False
-      elif arg[0] == 'outline':
-        outline = True,
-        tmpo = arg[1].split(',')
-        outline_thickness = tmpo[0]
-        if len(tmpo) > 1:
-          outline_feather = tmpo[1]
-      elif arg[0] == 'merge_outline':
-        merge_outline = True
-      elif arg[0] == 'no_merge_outline':
-        merge_outline = False
-      elif arg[0] == 'no_auto':
-        auto = False
-      elif arg[0] == 'color':
-        fgcolor = arg[1]
-      elif arg[0] == 'outline_color':
-        bgcolor = arg[1]
+    try:
+      arguments = parse_args_from_layer_name(layer_group.name)
+      for arg in arguments:
+        if arg[0] == 'ellipse':
+          isRound = True
+        elif arg[0] == 'rectangle':
+          isRound = False
+        elif arg[0] == 'min_step':
+          minStepSize = int(arg[1])
+        elif arg[0] == 'xpad':
+          xpad = int(arg[1])
+        elif arg[0] == 'ypad':
+          ypad = int(arg[1])
+        elif arg[0] == 'separate_groups':
+          separate_groups = True
+          separate_layers = False
+        elif arg[0] == 'separate_layers':
+          separate_groups = False
+          separate_layers = True
+        elif arg[0] == 'merge_source':
+          merge_source = True
+        elif arg[0] == 'no_merge_source':
+          merge_source = False
+        elif arg[0] == 'outline':
+          outline = True,
+          tmpo = arg[1].split(',')
+          outline_thickness = tmpo[0]
+          if len(tmpo) > 1:
+            outline_feather = tmpo[1]
+        elif arg[0] == 'merge_outline':
+          merge_outline = True
+        elif arg[0] == 'no_merge_outline':
+          merge_outline = False
+        elif arg[0] == 'no_auto':
+          auto = False
+        elif arg[0] == 'color':
+          fgcolor = arg[1]
+        elif arg[0] == 'outline_color':
+          bgcolor = arg[1]
+    except:
+      print("No arguments for this layer group, recursing only on children layer groups")
+      for layerId in sublayers:
+        layer = gimp.Item.from_id(layerId)
+        
+        # we ignore hidden layers
+        if not layer.visible:
+          continue
+        
+        # autobubble layer groups
+        if type(layer) is gimp.GroupLayer:
+          autobubble_group(image, layer, auto, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline)
+
 
   if fgcolor:
     set_fg_stack(fgcolor)
