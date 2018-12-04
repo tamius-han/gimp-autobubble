@@ -370,7 +370,7 @@ def getEllipseCenterForPoints(points):
   # find center
   middle_x = (points[0][0] + points[1][0] + points[2][0] + points[3][0]) / 4
   middle_y = (points[0][1] + points[1][1] + points[2][1] + points[3][1]) / 4
-  #
+  
   # find opposing vertices
   leftFirst = sortPointsByComponent(points, 0)
   #     * one of the first left points must be nw, the other sw
@@ -390,21 +390,25 @@ def getEllipseCenterForPoints(points):
   else:
     ne = leftFirst[3]
     se = leftFirst[2]
-  #
+  
+  # don't even get a center if either of the slopes is vertical
+  if nw[0] == se[0] or ne[0] == sw[0]:
+    return [-1, -1]
+
   # find where they intersect
   nwse_slope = (se[1] - nw[1]) / (se[0] - nw[0])
   swne_slope = (ne[1] - sw[1]) / (ne[0] - sw[0])
-  #
+  
   nwse_extra = se[1] - nwse_slope * se[0]
   swne_extra = ne[1] - swne_slope * ne[0]
-  #
+  
   x = (swne_extra - nwse_extra) / (nwse_slope - swne_slope)
   y = (nwse_slope * x) + nwse_extra
-  #
+  
   # mirror that over the center point from earlier
   mx = middle_x + (middle_x - x)
   my = middle_y + (middle_y - y)
-  #
+  
   # return value
   return [mx, my]
 
@@ -538,6 +542,12 @@ def calculateEllipseBounds_bruteforce(points):
     print("<starting new loop>")
 
     [mx, my] = getEllipseCenterForPoints(combination)
+
+    # let's see if getEllipseCenterForPoints told us to not bother with
+    # this set of points. We'd just waste time
+    if mx == -1:
+      continue
+
     [rx, ry] = bruteforceEllipseBounds(points, combination, mx, my)
 
     # did we already find an ellipse? If no, this is the best candidate
