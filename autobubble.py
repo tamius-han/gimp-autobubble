@@ -470,9 +470,9 @@ def bruteforceEllipseBounds(all_points, combination, mx, my):
   bestw = ew
   besth = eh
 
-  print("----- bruteforce -----")
-  print("inital area:")
-  print([bestArea, [mx, my], [bestw, besth]])
+  # print("----- bruteforce -----")
+  # print("inital area:")
+  # print([bestArea, [mx, my], [bestw, besth]])
 
   # true if ellipse is wider than taller, false otherwise
   isLandscape = ew >= eh
@@ -519,8 +519,8 @@ def bruteforceEllipseBounds(all_points, combination, mx, my):
           bestArea = nbb
           bestw = w
           besth = h
-          print("bruteforce: found new solution (area, mx, my, rx, ry")
-          print([bestArea, [mx, my], [bestw, besth]])
+          # print("bruteforce: found new solution (area, mx, my, rx, ry")
+          # print([bestArea, [mx, my], [bestw, besth]])
         else:
           break   # we won't find a better solution this iteration
     
@@ -537,9 +537,9 @@ def calculateEllipseBounds_bruteforce(points):
   bestBounds = [0, 0, 0, 0]
 
   for combination in itertools.combinations(points, 4):
-    print("")
-    print("")
-    print("<starting new loop>")
+    # print("")
+    # print("")
+    # print("<starting new loop>")
 
     [mx, my] = getEllipseCenterForPoints(combination)
 
@@ -556,21 +556,21 @@ def calculateEllipseBounds_bruteforce(points):
     if bestArea > 0:
       nbb = rx * ry
       if nbb < bestArea:
-        print("[[[ N E W   B E S T   S O L U T I O N]]]")
-        print ("mx, my, rx, ry")
-        print (bestBounds)
+        # print("[[[ N E W   B E S T   S O L U T I O N]]]")
+        # print ("mx, my, rx, ry")
+        # print (bestBounds)
         bestArea = nbb
         bestBounds = [mx, my, rx*2, ry*2]
     else:
       bestArea = rx * ry
       bestBounds = [mx, my, rx*2, ry*2]
-      print("BEST AREA:")
-      print([bestArea, [mx, my], [rx, ry]])
+      # print("BEST AREA:")
+      # print([bestArea, [mx, my], [rx, ry]])
       
     
-  print ("::")
-  print ("mx, my, rx, ry")
-  print (bestBounds)
+  # print ("::")
+  # print ("mx, my, rx, ry")
+  # print (bestBounds)
 
   return bestBounds
 
@@ -680,6 +680,7 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
   
   fgcolor = ''
   bgcolor = ''
+  texts_processed = 0
 
   if auto:
     try:
@@ -733,6 +734,7 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
         # autobubble layer groups
         if type(layer) is gimp.GroupLayer:
           autobubble_group(image, layer, auto, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline)
+      return
 
 
   if fgcolor:
@@ -754,34 +756,42 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
       # we hide layer gropups and put them on a "handle me later pls" list
       if type(layer) is gimp.GroupLayer:
         group_layers.append(layer)
-        layer.visible = False
-        continue
-      
-      # process all non-group layers
-      mkbubble(image, layer, isRound, minStepSize, xpad, ypad)
+      else:
+        pl = layer.parasite_list()
+        if pl and pl[0] == 'gimp-text-layer':
+          # process all non-group layers
+          print("started processing layer " + layer.name)
+          mkbubble(image, layer, isRound, minStepSize, xpad, ypad)
+          print(layer.name + " processed")
+          texts_processed += 1
 
-    # we've created bubbles for all layers. Now fill the bubble
-    group_bubble_layer = add_layer_group_bottom(image, layer_group)
-    paint_selection_fg(group_bubble_layer)
 
-    # if bubbles have an outline
-    if outline:
-      group_bubble_outline_layer = add_layer_below(image, group_bubble_layer)
-      mkoutline(image, outline_thickness, outline_feather)
-      paint_selection_bg(group_bubble_outline_layer)
 
-      if merge_outline:
-        name = group_bubble_layer.name
-        mergedLayer = pdb.gimp_image_merge_down(image, group_bubble_layer, EXPAND_AS_NECESSARY)
-        mergedLayer.name = name
+    if texts_processed > 0:
+      # we've created bubbles for all layers (excluding groups). Now fill the bubble
+      group_bubble_layer = add_layer_group_bottom(image, layer_group)
+      paint_selection_fg(group_bubble_layer)
+
+      # if bubbles have an outline
+      if outline:
+        group_bubble_outline_layer = add_layer_below(image, group_bubble_layer)
+        mkoutline(image, outline_thickness, outline_feather)
+        paint_selection_bg(group_bubble_outline_layer)
+
+        if merge_outline:
+          name = group_bubble_layer.name
+          mergedLayer = pdb.gimp_image_merge_down(image, group_bubble_layer, EXPAND_AS_NECESSARY)
+          mergedLayer.name = name
       
     clear_selection(image)
 
     # now it's recursion o'clock:
     # (and yes, we do recursion)
     for layer in group_layers:
-      layer.visible = True
-      autobubble_group(image, layer, auto, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline)
+      if layer.visible:
+        print("started processing group " + layer.name)
+        autobubble_group(image, layer, auto, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline)
+        print("group" + layer.name + "finished processing")
 
   else:
     # making bubbles on one layer group total has lots of things in common
@@ -795,37 +805,37 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
       
       # we hide layer gropups and put them on a "handle me later pls" list
       if type(layer) is gimp.GroupLayer:
-        group_layers.append(layer)
+        # group_layers.append(layer)
         autobubble_group(image, layer, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline)
         continue
-      
-      # process all non-group layers
-      mkbubble(image, layer, isRound, minStepSize, xpad, ypad)
+      else: 
+        # process all non-group layers
+        mkbubble(image, layer, isRound, minStepSize, xpad, ypad)
 
-      # if we separate layers, we do that here. Otherwise, we do that after
-      # calling this function.
-      if separate_layers:
-        bubble_layer = add_layer_below(image, layer)
-        paint_selection_fg(bubble_layer)
+        # if we separate layers, we do that here. Otherwise, we do that after
+        # calling this function.
+        if separate_layers:
+          bubble_layer = add_layer_below(image, layer)
+          paint_selection_fg(bubble_layer)
 
-        # if bubbles have an outline
-        if outline:
-          bubble_outline_layer = add_layer_below(image, bubble_layer)
-          mkoutline(image, outline_thickness, outline_feather)
-          paint_selection_bg(bubble_outline_layer)
+          # if bubbles have an outline
+          if outline:
+            bubble_outline_layer = add_layer_below(image, bubble_layer)
+            mkoutline(image, outline_thickness, outline_feather)
+            paint_selection_bg(bubble_outline_layer)
 
-          if merge_outline:
-            name = group_bubble_layer.name
-            mergedLayer = pdb.gimp_image_merge_down(image, group_bubble_layer, EXPAND_AS_NECESSARY)
-            mergedLayer.name = name
-        
-        # merge source is a valid strat here
-        if merge_source:
-          name = layer.name         # save name of original layer
-          merged_layer = pdb.gimp_image_merge_down(image, layer, EXPAND_AS_NECESSARY)
-          merged_layer.name = name  # restore name of original layer
+            if merge_outline:
+              name = group_bubble_layer.name
+              mergedLayer = pdb.gimp_image_merge_down(image, group_bubble_layer, EXPAND_AS_NECESSARY)
+              mergedLayer.name = name
+          
+          # merge source is a valid strat here
+          if merge_source:
+            name = layer.name         # save name of original layer
+            merged_layer = pdb.gimp_image_merge_down(image, layer, EXPAND_AS_NECESSARY)
+            merged_layer.name = name  # restore name of original layer
 
-        clear_selection(image)
+          clear_selection(image)
 
   if fgcolor:
     restore_fg_stack()
@@ -851,7 +861,7 @@ def python_autobubble(image, layer, auto = True, isRound = True, minStepSize = 2
 
   # remember the 'we do that after calling the function' bit from earlier?
   # this is where it gets done
-  if not isGroupLayer or not (separate_groups or separate_layers):
+  if not (separate_groups or separate_layers):
     bubble_layer = add_layer_below(image, layer)
     paint_selection_fg(bubble_layer)
 
