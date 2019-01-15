@@ -135,9 +135,9 @@ def parse_args_from_layer_name(name):
     return [['end']]
   
   # argline is:
-  # .split('>>')[0] — everything before the first >> (if any)
-  #    .split('()=>autobubble') — that's after first ()=>autobubble
-  #       .split('()=>)           — and before the command that follows (if any)
+  # .split('>>')[0] -- everything before the first >> (if any)
+  #    .split('()=>autobubble') -- that's after first ()=>autobubble
+  #       .split('()=>)           -- and before the command that follows (if any)
   argLine = firstCommand.split('()=>autobubble')[1].split('()=>')[0]
   argsIn = argLine.split(' ')
 
