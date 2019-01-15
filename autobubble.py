@@ -146,8 +146,7 @@ def parse_args_from_layer_name(name):
   for arg in argsIn:
     argsOut.append(arg.split('='))
 
-  # >> can be stacked, but you can't use it in two command blocks
-  argPassAll = "()=>autobubble".join(name.split('>>'))
+  argPassAll = "()=>autobubble".join(name.split('()=>autobubble')[1:]).split('>>')
   argPassCount = len(argPassAll)
 
   if argPassCount > 1:
