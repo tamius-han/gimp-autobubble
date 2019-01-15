@@ -56,7 +56,7 @@ def get_layer_stack_position(layer, group):
   return 0  # for some reason we didn't find proper position of layer in the stack     
 
 # add a new layer under given layer
-def add_layer_below(image, layer):
+def add_layer_below(image, layer, preserveCmd=False, argumentPass="()=>skip", tag=''):
   stack_pos = 0
   
   if layer.parent:
@@ -68,7 +68,13 @@ def add_layer_below(image, layer):
     # parent is not a group layer (e.g. selected layer is on top level)
     stack_pos = get_layer_stack_position(layer, image.layers)
   
-  layer_out = gimp.Layer(image, "outline::{}".format(layer.name), image.width, image.height, get_layer_type(image), 100, NORMAL_MODE)
+  if preserveCmd:
+    new_name = layer.name
+  else:
+    new_name = layer.name.split('()=>')[0]
+
+
+  layer_out = gimp.Layer(image, "autobubble{}::{}{}".format(tag, new_name, argumentPass), image.width, image.height, get_layer_type(image), 100, NORMAL_MODE)
   
   # if img.active_layer.parent doesn't exist, it adds layer to top group. Otherwise 
   # the layer will be added into current layer group
@@ -123,13 +129,26 @@ def add_layer_group_bottom(image, layer):
 # yes, we'll parse arguments from layers. 
 
 def parse_args_from_layer_name(name):
-  argLine = name.split('::autobubble')[1].split('::')[0]
+  firstCommand = name.split('>>')[0]
+  if firstCommand.find('()=>skip'):
+    return [['skip']]
+  if firstCommand.find('()=>end'):
+    return [['end']]
+  
+  argLine = name.split('()=>autobubble')[1].split('>>')[0].split('()=>')[0]
   argsIn = argLine.split(' ')
 
   argsOut = []
 
   for arg in argsIn:
     argsOut.append(arg.split('='))
+
+  argPassAll = "()=>autobubble".join(name.split('()=>autobubble')[1:]).split('>>')
+  argPassCount = len(argPassAll)
+
+  if argPassCount > 1:
+    argPass = '>>'.join(argPassAll[1:])
+    argsOut.append(['pass', argPass])
 
   return argsOut
 
@@ -672,7 +691,6 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
   # TODO: optionally set parameters from layer full name
   # NOTE: parameter from layer full name override function call
   
-  
   # get children of currently active layer group
   # returns [group layer id, [array with sublayer ids]]
   # if we do dis, we only get array with sublayer ids
@@ -682,10 +700,18 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
   bgcolor = ''
   texts_processed = 0
 
+  skip = False
+  argPass = '()=>skip'
+  preserveCmd = False
+
   if auto:
     try:
       arguments = parse_args_from_layer_name(layer_group.name)
       for arg in arguments:
+        if arg[0] == 'end':
+          return
+        if arg[0] == 'skip':
+          skip = True
         if arg[0] == 'ellipse':
           isRound = True
         elif arg[0] == 'rectangle':
@@ -722,6 +748,11 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
           fgcolor = arg[1]
         elif arg[0] == 'outline_color':
           bgcolor = arg[1]
+        elif arg[0] == 'pass':
+          argPass = arg[1]
+        elif arg[0] == 'preserve_cmd':
+          preserveCmd = True
+
     except:
       print("No arguments for this layer group, recursing only on children layer groups")
       for layerId in sublayers:
@@ -767,14 +798,14 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
 
 
 
-    if texts_processed > 0:
+    if texts_processed > 0 and not skip:
       # we've created bubbles for all layers (excluding groups). Now fill the bubble
-      group_bubble_layer = add_layer_group_bottom(image, layer_group)
+      group_bubble_layer = add_layer_below(image, layer_group, preserveCmd, argPass)
       paint_selection_fg(group_bubble_layer)
 
       # if bubbles have an outline
       if outline:
-        group_bubble_outline_layer = add_layer_below(image, group_bubble_layer)
+        group_bubble_outline_layer = add_layer_below(image, group_bubble_layer, preserveCmd, argPass, '-outline')
         mkoutline(image, outline_thickness, outline_feather)
         paint_selection_bg(group_bubble_outline_layer)
 
@@ -808,19 +839,19 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
         # group_layers.append(layer)
         autobubble_group(image, layer, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline)
         continue
-      else: 
+      elif not skip: 
         # process all non-group layers
         mkbubble(image, layer, isRound, minStepSize, xpad, ypad)
 
         # if we separate layers, we do that here. Otherwise, we do that after
         # calling this function.
         if separate_layers:
-          bubble_layer = add_layer_below(image, layer)
+          bubble_layer = add_layer_below(image, layer, preserveCmd, argPass)
           paint_selection_fg(bubble_layer)
 
           # if bubbles have an outline
           if outline:
-            bubble_outline_layer = add_layer_below(image, bubble_layer)
+            bubble_outline_layer = add_layer_below(image, bubble_layer, preserveCmd, argPass, '-outline')
             mkoutline(image, outline_thickness, outline_feather)
             paint_selection_bg(bubble_outline_layer)
 

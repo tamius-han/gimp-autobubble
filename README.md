@@ -28,9 +28,9 @@ This feature is mildly useful if you're doing repetitive things, such as e.g. ma
 
 You can only use ***one*** command block for a single script. However, it should be safe to mix command blocks of multiple scripts.
 
-If script runs recursively inside a layer group, any nested layer group will be processed with the same parameters as the parent group. (Some commands are exception to the rule)
+~~If script runs recursively inside a layer group, any nested layer group will be processed with the same parameters as the parent group unless specified otherwise. (Some commands are exception to the rule)~~ Not true 
 
-If selected/top level layer group doesn't have a command block, it will be skipped. Any descendant layer or layer group that has a command block in its name, however, will be processed according to command parameters.
+If ~~selected/top level~~ _a_ layer group doesn't have a command block, it will be skipped. Any descendant layer or layer group that has a command block in its name, however, will be processed according to command parameters.
 
 When creating bubbles, new layer should appear under the group.
 
@@ -51,13 +51,13 @@ Example of a command block is here.
 `ypad=X` — bubble should have this many pixels of empty space above and below the upper and lower edges of text.
 `xpad=X` — bubble should have this many pixels of empty space to the left and right of the left and right edges of text.
 `color=#xxxxxx` — speech bubble color in hexadecimal/html values. Only takes the six-digit hex code, not words.
-`outline` — automatically add outline to speech bubbles
+`outline=X[,Y]` — automatically add outline to speech bubbles. X is thickness of outline in pixels. Y is optional parameter for feather.
 `outline_color=#xxxxxx` — color for outline. Meaningless if `outline` option is not specified.
 `no_auto` — toggles automatic mode off. Not sure if useful.
 `separate_groups` — will create bubbles for entire group instead instead of outlining each layer inside of the group individually. Outline of a layer group will not include outline of layers inside nested groups. Those will be processed separately.
 `separate_layers` — will create a bubble for every layer inside a group (recursively)
 
-If neither `separate_groups` and `separate_layers` are set, script will outline current layer or layer group. If creating bubble on layer group in this case, the bubble layer will contain bubbles of all layers in the layer group, including layers inside a nested group. These two options can _not_ be defined at the same time. If you try to use both at once, the last one wins.
+If neither `separate_groups` and `separate_layers` are set, ~~script will outline current layer or layer group. If creating bubble on layer group in this case, the bubble layer will contain bubbles of all layers in the layer group, including layers inside a nested group~~TODO. These two options can _not_ be defined at the same time. If you try to use both at once, the last one wins.~~
 
 `merge_source` — merge source layer. Only works with `separate_layers` option.
 `merge_outline` — merge outline with bubble layer. Only works if `outline` option is toggled.
