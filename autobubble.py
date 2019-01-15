@@ -73,7 +73,6 @@ def add_layer_below(image, layer, preserveCmd=False, argumentPass="()=>skip", ta
   else:
     new_name = layer.name.split('()=>')[0]
 
-
   layer_out = gimp.Layer(image, "autobubble{}::{}{}".format(tag, new_name, argumentPass), image.width, image.height, get_layer_type(image), 100, NORMAL_MODE)
   
   # if img.active_layer.parent doesn't exist, it adds layer to top group. Otherwise 
@@ -130,12 +129,16 @@ def add_layer_group_bottom(image, layer):
 
 def parse_args_from_layer_name(name):
   firstCommand = name.split('>>')[0]
-  if firstCommand.find('()=>skip'):
+  if firstCommand.find('()=>skip') != -1:
     return [['skip']]
-  if firstCommand.find('()=>end'):
+  if firstCommand.find('()=>end') != -1:
     return [['end']]
   
-  argLine = name.split('()=>autobubble')[1].split('>>')[0].split('()=>')[0]
+  # argline is:
+  # .split('>>')[0] — everything before the first >> (if any)
+  #    .split('()=>autobubble') — that's after first ()=>autobubble
+  #       .split('()=>)           — and before the command that follows (if any)
+  argLine = firstCommand.split('()=>autobubble')[1].split('()=>')[0]
   argsIn = argLine.split(' ')
 
   argsOut = []
@@ -143,7 +146,8 @@ def parse_args_from_layer_name(name):
   for arg in argsIn:
     argsOut.append(arg.split('='))
 
-  argPassAll = "()=>autobubble".join(name.split('()=>autobubble')[1:]).split('>>')
+  # >> can be stacked, but you can't use it in two command blocks
+  argPassAll = "()=>autobubble".join(name.split('>>'))
   argPassCount = len(argPassAll)
 
   if argPassCount > 1:
@@ -791,14 +795,12 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
         pl = layer.parasite_list()
         if pl and pl[0] == 'gimp-text-layer':
           # process all non-group layers
-          print("started processing layer " + layer.name)
+          # print("started processing layer " + layer.name)
           mkbubble(image, layer, isRound, minStepSize, xpad, ypad)
-          print(layer.name + " processed")
+          # print(layer.name + " processed")
           texts_processed += 1
 
-
-
-    if texts_processed > 0 and not skip:
+    if texts_processed > 0 and (not skip):
       # we've created bubbles for all layers (excluding groups). Now fill the bubble
       group_bubble_layer = add_layer_below(image, layer_group, preserveCmd, argPass)
       paint_selection_fg(group_bubble_layer)
@@ -820,9 +822,9 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
     # (and yes, we do recursion)
     for layer in group_layers:
       if layer.visible:
-        print("started processing group " + layer.name)
+        # print("started processing group " + layer.name)
         autobubble_group(image, layer, auto, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline)
-        print("group" + layer.name + "finished processing")
+        # print("group" + layer.name + "finished processing")
 
   else:
     # making bubbles on one layer group total has lots of things in common
