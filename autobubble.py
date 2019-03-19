@@ -73,7 +73,7 @@ def add_layer_below(image, layer, preserveCmd=False, argumentPass="()=>skip", ta
   else:
     new_name = layer.name.split('()=>')[0]
 
-  layer_out = gimp.Layer(image, "autobubble{}::{}{}".format(tag, new_name, argumentPass), image.width, image.height, get_layer_type(image), 100, NORMAL_MODE)
+  layer_out = gimp.Layer(image, "@autobubble{}::{}{}".format(tag, new_name, argumentPass), image.width, image.height, get_layer_type(image), 100, NORMAL_MODE)
   
   # if img.active_layer.parent doesn't exist, it adds layer to top group. Otherwise 
   # the layer will be added into current layer group
@@ -129,6 +129,7 @@ def add_layer_group_bottom(image, layer):
 
 def parse_args_from_layer_name(name):
   firstCommand = name.split('>>')[0]
+
   if firstCommand.find('()=>skip') != -1:
     return [['skip']]
   if firstCommand.find('()=>end') != -1:
@@ -338,7 +339,8 @@ def selectRectangle(image, layer, rows, xpad, ypad):
 
   # if the difference between row[n][1] and row[n+1][0] is more than this,
   # treat the rows as two separate bubbles
-  connect_rows_treshold /= (len(rows) * 2)
+
+  connect_rows_treshold /= (len(rows))  # Treshold is _average_ row height, hence dividing by len(rows)
 
   # now we can start drawing rectangles
   for i in xrange(0, len(rows)):
@@ -352,7 +354,8 @@ def selectRectangle(image, layer, rows, xpad, ypad):
 
     # ensure current row is connected with row on top (unless the gap between two rows is
     # bigger than our treshold)
-    if i > 0 and rows[i][0] - rows[i-1][1] < connect_rows_treshold:
+
+    if i > 0 and (rows[i][0] - rows[i-1][1]) < connect_rows_treshold:
       select_x =            max(rows[i][2], rows[i-1][2]) 
       select_y =            rows[i-1][1] 
       select_w = 2 * xpad + min(rows[i][3], rows[i-1][3]) - select_x
@@ -690,7 +693,8 @@ def mkoutline (image, thickness, feather):
   if feather > 0:
     feather_selection(image, feather)
 
-def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSize = 25, xpad = 7, ypad = 3, separate_groups = True, separate_layers = False, merge_source = False, outline = False, outline_thickness = 3, outline_feather = 0, merge_outline = False ):
+def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSize = 25, xpad = 7, ypad = 3, separate_groups = True, separate_layers = False, merge_source = False, outline = False, outline_thickness = 3, outline_feather = 0, merge_outline = False, inherit_auto_config = False, use_defaults = False):
+  print("[autobubble_group] Hello.")
   # TODO: optionally set parameters from layer full name
   # NOTE: parameter from layer full name override function call
   
@@ -756,19 +760,29 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
         elif arg[0] == 'preserve_cmd':
           preserveCmd = True
 
+      if arguments and inherit_auto_config:
+        use_defaults = True
+      elif not arguments and not use_defaults:
+        skip = True
+      
+      print("[autobubble_group] arguments parsed successfully.")
+    
     except:
-      print("No arguments for this layer group, recursing only on children layer groups")
-      for layerId in sublayers:
-        layer = gimp.Item.from_id(layerId)
+      if not use_defaults: # if use_defaults is set, the function will continue with same parameters as its parent
+        print("[autobubble_group] no arguments present on the layer group & use_defaults is not set. autobubble_group() will be run recursively, but nothing will be done on this layer (group).")
+
+        for layerId in sublayers:
+          layer = gimp.Item.from_id(layerId)
+          
+          # we ignore hidden layers
+          if not layer.visible:
+            continue
+          
+          # autobubble layer groups
+          if type(layer) is gimp.GroupLayer:
+            autobubble_group(image, layer, auto, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline, inherit_auto_config, use_defaults)
         
-        # we ignore hidden layers
-        if not layer.visible:
-          continue
-        
-        # autobubble layer groups
-        if type(layer) is gimp.GroupLayer:
-          autobubble_group(image, layer, auto, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline)
-      return
+        return
 
 
   if fgcolor:
@@ -778,6 +792,8 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
     set_bg_stack(bgcolor)
 
   if separate_groups:
+    print("[autobubble_group] will operate on separate groups. skip?")
+    print(skip)
     group_layers = []
 
     for layerId in sublayers:
@@ -789,13 +805,19 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
       
       # we hide layer gropups and put them on a "handle me later pls" list
       if type(layer) is gimp.GroupLayer:
+        print("[autobubble_group] trying to operate on a layer group. Deferring for later recursion")
         group_layers.append(layer)
       else:
+        print("[autobubble_group] checking layer for text")
+        print(layer)
+        print(layer.parasite_list())
         pl = layer.parasite_list()
         if pl and pl[0] == 'gimp-text-layer':
+          print("[autobubble_group] layer has text. Will make bubble.")
           # process all non-group layers
           # print("started processing layer " + layer.name)
           mkbubble(image, layer, isRound, minStepSize, xpad, ypad)
+          print("[autobubble_group] bubble created.")
           # print(layer.name + " processed")
           texts_processed += 1
 
@@ -822,7 +844,7 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
     for layer in group_layers:
       if layer.visible:
         # print("started processing group " + layer.name)
-        autobubble_group(image, layer, auto, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline)
+        autobubble_group(image, layer, auto, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline, inherit_auto_config, use_defaults)
         # print("group" + layer.name + "finished processing")
 
   else:
@@ -838,7 +860,7 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
       # we hide layer gropups and put them on a "handle me later pls" list
       if type(layer) is gimp.GroupLayer:
         # group_layers.append(layer)
-        autobubble_group(image, layer, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline)
+        autobubble_group(image, layer, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline, inherit_auto_config, use_defaults)
         continue
       elif not skip: 
         # process all non-group layers
@@ -877,7 +899,7 @@ def autobubble_group( image, layer_group, auto = True, isRound = True, minStepSi
 
 
 # main function
-def python_autobubble(image, layer, auto = True, isRound = True, minStepSize = 25, xpad = 7, ypad = 3, separate_groups = True, separate_layers = False, merge_source = False, outline = False, outline_thickness = 3, outline_feather = 0, merge_outline = False ):
+def python_autobubble(image, layer, auto = True, isRound = True, minStepSize = 25, xpad = 7, ypad = 3, separate_groups = True, separate_layers = False, merge_source = False, outline = False, outline_thickness = 3, outline_feather = 0, merge_outline = False, inherit_auto_config = False, use_defaults = False):
   # save background
   bg_save = gimp.get_background()
   fg_save = gimp.get_foreground()
@@ -887,7 +909,7 @@ def python_autobubble(image, layer, auto = True, isRound = True, minStepSize = 2
   isGroupLayer = type(layer) is gimp.GroupLayer
   # treat group layers differently
   if isGroupLayer:
-    autobubble_group(image, layer, auto, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline)
+    autobubble_group(image, layer, auto, isRound, minStepSize, xpad, ypad, separate_groups, separate_layers, merge_source, outline, outline_thickness, outline_feather, merge_outline, inherit_auto_config, use_defaults)
   else:
     mkbubble(image, layer, isRound, minStepSize, xpad, ypad)
 
